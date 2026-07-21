@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 2400" width="2400" height="2400">
+  <defs>
+    <linearGradient id="s10-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffb6d5"/>
+      <stop offset="100%" stop-color="#ffe0ec"/>
+    </linearGradient>
+    <radialGradient id="s10-petal" cx="0.3" cy="0.3" r="0.9">
+      <stop offset="0%" stop-color="#ffd3e2"/>
+      <stop offset="100%" stop-color="#ff6fa3"/>
+    </radialGradient>
+  </defs>
+
+  <path fill-rule="evenodd" fill="url(#s10-bg)"
+    d="M0,0 H2400 V2400 H0 Z
+       M75,75 H1170 V1170 H75 Z
+       M1230,75 H2325 V1170 H1230 Z
+       M75,1230 H1170 V2325 H75 Z
+       M1230,1230 H2325 V2325 H1230 Z"/>
+
+  <g fill="none" stroke="#ff6fa8" stroke-width="16">
+    <rect x="75" y="75" width="1095" height="1095" rx="10"/>
+    <rect x="1230" y="75" width="1095" height="1095" rx="10"/>
+    <rect x="75" y="1230" width="1095" height="1095" rx="10"/>
+    <rect x="1230" y="1230" width="1095" height="1095" rx="10"/>
+  </g>
+
+  <!-- Scattered blossom petals, kept to the outer margin and gap cross -->
+  <g>
+    <g transform="translate(35,35) rotate(15)"><ellipse rx="20" ry="13" fill="url(#s10-petal)"/></g>
+    <g transform="translate(2365,35) rotate(-20)"><ellipse rx="22" ry="14" fill="url(#s10-petal)"/></g>
+    <g transform="translate(35,2365) rotate(40)"><ellipse rx="21" ry="13" fill="url(#s10-petal)"/></g>
+    <g transform="translate(2365,2365) rotate(-45)"><ellipse rx="20" ry="13" fill="url(#s10-petal)"/></g>
+    <g transform="translate(600,35) rotate(30)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <g transform="translate(1800,35) rotate(-25)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <g transform="translate(600,2365) rotate(10)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <g transform="translate(1800,2365) rotate(-10)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <g transform="translate(35,600) rotate(60)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <g transform="translate(35,1800) rotate(-60)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <g transform="translate(2365,600) rotate(60)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <g transform="translate(2365,1800) rotate(-60)"><ellipse rx="16" ry="10" fill="url(#s10-petal)"/></g>
+    <!-- gap cross petals around the center -->
+    <g transform="translate(1200,42) rotate(20)"><ellipse rx="17" ry="11" fill="url(#s10-petal)"/></g>
+    <g transform="translate(1200,2358) rotate(-20)"><ellipse rx="17" ry="11" fill="url(#s10-petal)"/></g>
+    <g transform="translate(1163,1140) rotate(35)"><ellipse rx="14" ry="9" fill="url(#s10-petal)"/></g>
+    <g transform="translate(1237,1260) rotate(-35)"><ellipse rx="14" ry="9" fill="url(#s10-petal)"/></g>
+  </g>
+
+  <!-- Center blossom mark in the gap cross -->
+  <g transform="translate(1200,1200)">
+    <circle r="52" fill="#ffffff"/>
+    <g fill="url(#s10-petal)">
+      <ellipse rx="18" ry="26" transform="rotate(0) translate(0,-22)"/>
+      <ellipse rx="18" ry="26" transform="rotate(72) translate(0,-22)"/>
+      <ellipse rx="18" ry="26" transform="rotate(144) translate(0,-22)"/>
+      <ellipse rx="18" ry="26" transform="rotate(216) translate(0,-22)"/>
+      <ellipse rx="18" ry="26" transform="rotate(288) translate(0,-22)"/>
+    </g>
+    <circle r="10" fill="#ffdf6f"/>
+  </g>
+
+  <text x="1200" y="2374" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="700" letter-spacing="4" fill="#c94a78">TASTE OF KOREA · 벚꽃</text>
+</svg>

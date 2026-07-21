@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 3600" width="1200" height="3600">
+  <defs>
+    <linearGradient id="s03-chrome" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#ffe3fb"/>
+      <stop offset="55%" stop-color="#c9a8ff"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="s03-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff6fd8"/>
+      <stop offset="55%" stop-color="#c86bff"/>
+      <stop offset="100%" stop-color="#7a5cff"/>
+    </linearGradient>
+    <linearGradient id="s03-footer" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff2fb0"/>
+      <stop offset="100%" stop-color="#7a2fff"/>
+    </linearGradient>
+  </defs>
+
+  <path fill-rule="evenodd" fill="url(#s03-bg)"
+    d="M32,0 H1168 A32,32 0 0 1 1200,32 V3568 A32,32 0 0 1 1168,3600 H32 A32,32 0 0 1 0,3568 V32 A32,32 0 0 1 32,0 Z
+       M75,75 H1125 V855 H75 Z
+       M75,930 H1125 V1710 H75 Z
+       M75,1785 H1125 V2565 H75 Z
+       M75,2640 H1125 V3420 H75 Z"/>
+
+  <rect x="8" y="8" width="1184" height="3584" rx="26" fill="none" stroke="url(#s03-chrome)" stroke-width="16"/>
+  <g fill="none" stroke="url(#s03-chrome)" stroke-width="10">
+    <rect x="75" y="75" width="1050" height="780"/>
+    <rect x="75" y="930" width="1050" height="780"/>
+    <rect x="75" y="1785" width="1050" height="780"/>
+    <rect x="75" y="2640" width="1050" height="780"/>
+  </g>
+
+  <!-- Big saturated star sparkles scattered in the margins/gaps only -->
+  <g fill="#ffffff" stroke="#7a2fff" stroke-width="2">
+    <path d="M110,38 l10,24 24,10 -24,10 -10,24 -10,-24 -24,-10 24,-10 Z"/>
+    <path d="M1080,42 l8,20 20,8 -20,8 -8,20 -8,-20 -20,-8 20,-8 Z"/>
+    <path d="M1090,890 l11,26 26,11 -26,11 -11,26 -11,-26 -26,-11 26,-11 Z"/>
+    <path d="M100,1745 l10,24 24,10 -24,10 -10,24 -10,-24 -24,-10 24,-10 Z"/>
+    <path d="M1090,2600 l10,24 24,10 -24,10 -10,24 -10,-24 -24,-10 24,-10 Z"/>
+  </g>
+  <circle cx="55" cy="893" r="8" fill="#ffe14f"/>
+  <circle cx="1145" cy="1748" r="8" fill="#ffe14f"/>
+  <circle cx="55" cy="2603" r="8" fill="#ffe14f"/>
+
+  <!-- Bold saturated footer band -->
+  <rect x="8" y="3430" width="1184" height="162" rx="12" fill="url(#s03-footer)"/>
+  <path d="M180,3465 l9,22 22,9 -22,9 -9,22 -9,-22 -22,-9 22,-9 Z" fill="#ffffff"/>
+  <path d="M980,3465 l9,22 22,9 -22,9 -9,22 -9,-22 -22,-9 22,-9 Z" fill="#ffffff"/>
+  <text x="600" y="3510" text-anchor="middle" font-family="sans-serif" font-size="52" font-weight="800" fill="#ffffff" letter-spacing="2">TASTE ✦ KOREA</text>
+  <text x="600" y="3556" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif" font-size="26" fill="#ffe3fb">인생네컷 · Y2K ver.</text>
+</svg>

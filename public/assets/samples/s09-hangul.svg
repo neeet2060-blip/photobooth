@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 3600" width="1200" height="3600">
+  <defs>
+    <linearGradient id="s09-red" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d92b3d"/>
+      <stop offset="100%" stop-color="#ff5a4f"/>
+    </linearGradient>
+  </defs>
+
+  <path fill-rule="evenodd" fill="#ffffff"
+    d="M0,0 H1200 V3600 H0 Z
+       M75,75 H1125 V855 H75 Z
+       M75,930 H1125 V1710 H75 Z
+       M75,1785 H1125 V2565 H75 Z
+       M75,2640 H1125 V3420 H75 Z"/>
+
+  <!-- Bold color block across the top margin -->
+  <rect x="0" y="0" width="1200" height="75" fill="url(#s09-red)"/>
+  <text x="60" y="50" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif" font-size="38" font-weight="800" fill="#ffffff">한국의 맛</text>
+  <text x="1140" y="50" text-anchor="end" font-family="sans-serif" font-size="22" font-weight="700" letter-spacing="2" fill="#ffffff">TASTE OF KOREA</text>
+
+  <g fill="none" stroke="#1c1c1c" stroke-width="12">
+    <rect x="75" y="75" width="1050" height="780"/>
+    <rect x="75" y="930" width="1050" height="780"/>
+    <rect x="75" y="1785" width="1050" height="780"/>
+    <rect x="75" y="2640" width="1050" height="780"/>
+  </g>
+
+  <!-- Bold red rule across each inter-slot gap -->
+  <rect x="75" y="887" width="1050" height="8" fill="url(#s09-red)"/>
+  <rect x="75" y="1742" width="1050" height="8" fill="url(#s09-red)"/>
+  <rect x="75" y="2597" width="1050" height="8" fill="url(#s09-red)"/>
+
+  <!-- Bold footer band: big Hangul typography as the design element, real branded footer -->
+  <rect x="0" y="3420" width="1200" height="180" fill="#1c1c1c"/>
+  <rect x="0" y="3420" width="1200" height="8" fill="url(#s09-red)"/>
+  <text x="600" y="3505" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif"
+    font-size="68" font-weight="800" fill="#ffffff">인생네컷</text>
+  <text x="600" y="3552" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="700" letter-spacing="4" fill="url(#s09-red)">TASTE OF KOREA</text>
+</svg>

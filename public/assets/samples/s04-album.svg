@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 2400" width="2400" height="2400">
+  <defs>
+    <linearGradient id="s04-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e0313f"/>
+      <stop offset="100%" stop-color="#ff5a68"/>
+    </linearGradient>
+  </defs>
+
+  <path fill-rule="evenodd" fill="#f4f1ea"
+    d="M0,0 H2400 V2400 H0 Z
+       M75,75 H1170 V1170 H75 Z
+       M1230,75 H2325 V1170 H1230 Z
+       M75,1230 H1170 V2325 H75 Z
+       M1230,1230 H2325 V2325 H1230 Z"/>
+
+  <!-- Bold black frame borders -->
+  <g fill="none" stroke="#111111" stroke-width="22">
+    <rect x="75" y="75" width="1095" height="1095"/>
+    <rect x="1230" y="75" width="1095" height="1095"/>
+    <rect x="75" y="1230" width="1095" height="1095"/>
+    <rect x="1230" y="1230" width="1095" height="1095"/>
+  </g>
+
+  <!-- Full black running-head band across the top margin -->
+  <rect x="0" y="0" width="2400" height="75" fill="#111111"/>
+  <rect x="0" y="70" width="2400" height="6" fill="url(#s04-accent)"/>
+  <text x="70" y="52" font-family="sans-serif" font-size="38" font-weight="800" letter-spacing="2" fill="#ffffff">TASTE OF KOREA</text>
+  <text x="2330" y="52" text-anchor="end" font-family="sans-serif" font-size="38" font-weight="800" fill="#ff5a68">2026</text>
+
+  <!-- Bold red band across the bottom margin, mirroring the top -->
+  <rect x="0" y="2340" width="2400" height="60" fill="url(#s04-accent)"/>
+  <text x="1200" y="2382" text-anchor="middle" font-family="sans-serif" font-size="30" font-weight="700" letter-spacing="6" fill="#ffffff">인생네컷 · TASTE OF KOREA</text>
+
+  <!-- Center cross gets the strong title mark, sized to the 60px gap plus small safe overlap -->
+  <rect x="1130" y="1130" width="140" height="140" fill="#111111"/>
+  <text x="1200" y="1182" text-anchor="middle" font-family="serif" font-size="34" font-weight="700" fill="#ffffff">인생</text>
+  <text x="1200" y="1220" text-anchor="middle" font-family="serif" font-size="28" fill="#ff8f97">네컷</text>
+
+  <!-- Serial mark corner sticker -->
+  <rect x="2245" y="2295" width="80" height="30" fill="#e0313f"/>
+  <text x="2285" y="2317" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">NO. 01</text>
+</svg>

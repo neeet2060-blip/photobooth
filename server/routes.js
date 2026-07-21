@@ -9,6 +9,8 @@ const QRCode = require('qrcode');
 const store = require('./store');
 const { PHASES, FILTERS } = require('./state');
 const { getLanIp } = require('./ip');
+const printqueue = require('./printqueue');
+const { PRINTER_NAME_REGEX, PRINT_MEDIA_REGEX } = require('./printer');
 
 const TOKEN_REGEX = /^[a-f0-9]{24}$/;
 const FRAME_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -94,6 +96,24 @@ function registerRoutes(app, deps) {
     fileFilter: fileFilterFactory(ALLOWED_PHOTO_MIME),
   });
 
+  const printSheetUpload = multer({
+    storage: multer.diskStorage({
+      destination: (req, file, cb) => {
+        const sessionId = req.body.sessionId;
+        if (typeof sessionId !== 'string' || !/^[a-z0-9]{6,40}$/.test(sessionId)) {
+          cb(new Error('invalid_session_id'));
+          return;
+        }
+        const dir = path.join(store.PHOTOS_DIR, sessionId);
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (req, file, cb) => cb(null, 'print.jpg'),
+    }),
+    limits: { fileSize: MAX_IMAGE_BYTES },
+    fileFilter: fileFilterFactory(ALLOWED_PHOTO_MIME),
+  });
+
   const frameUpload = multer({
     storage: multer.diskStorage({
       destination: (req, file, cb) => cb(null, store.FRAMES_DIR),
@@ -168,6 +188,27 @@ function registerRoutes(app, deps) {
       .catch((err) => {
         res.status(500).json({ ok: false, error: 'qr_generation_failed', message: err.message });
       });
+  });
+
+  // ---- Print-ready sheet upload (paid printing add-on; QR download above is
+  // unaffected). This never dispatches a state action — print readiness is
+  // independent of the session state machine, it just saves the file. ----
+
+  app.post('/api/print-sheet', printSheetUpload.single('photo'), (req, res) => {
+    const state = getState();
+    const sessionId = req.body.sessionId;
+
+    if (!req.file) {
+      return res.status(400).json({ ok: false, error: 'missing_file' });
+    }
+    if (state.phase !== PHASES.FILTER) {
+      return res.status(409).json({ ok: false, error: 'not_in_filter_phase' });
+    }
+    if (sessionId !== state.sessionId) {
+      return res.status(409).json({ ok: false, error: 'session_mismatch' });
+    }
+
+    return res.json({ ok: true });
   });
 
   // ---- Visitor download page ----
@@ -303,6 +344,39 @@ function registerRoutes(app, deps) {
       next.defaultLang = body.defaultLang;
     }
 
+    if (body.printUnitPriceCents !== undefined) {
+      const num = Number(body.printUnitPriceCents);
+      if (!Number.isInteger(num) || num <= 0 || num > 100000) {
+        return res.status(400).json({ ok: false, error: 'invalid_printUnitPriceCents' });
+      }
+      next.printUnitPriceCents = num;
+    }
+    if (body.maxPrintQuantity !== undefined) {
+      const num = Number(body.maxPrintQuantity);
+      if (!Number.isInteger(num) || num < 1 || num > 99) {
+        return res.status(400).json({ ok: false, error: 'invalid_maxPrintQuantity' });
+      }
+      next.maxPrintQuantity = num;
+    }
+    if (body.printMode !== undefined) {
+      if (body.printMode !== 'folder' && body.printMode !== 'cups') {
+        return res.status(400).json({ ok: false, error: 'invalid_printMode' });
+      }
+      next.printMode = body.printMode;
+    }
+    if (body.printerName !== undefined) {
+      if (body.printerName !== '' && !PRINTER_NAME_REGEX.test(body.printerName)) {
+        return res.status(400).json({ ok: false, error: 'invalid_printerName' });
+      }
+      next.printerName = body.printerName;
+    }
+    if (body.printMedia !== undefined) {
+      if (!PRINT_MEDIA_REGEX.test(body.printMedia)) {
+        return res.status(400).json({ ok: false, error: 'invalid_printMedia' });
+      }
+      next.printMedia = body.printMedia;
+    }
+
     const written = store.writeSettings(next);
     res.json({ ok: true, settings: written });
   });
@@ -315,6 +389,91 @@ function registerRoutes(app, deps) {
       ? Math.round((stats.sessionsCompleted / stats.sessionsStarted) * 1000) / 10
       : 0;
     res.json({ ok: true, stats: { ...stats, completionRate } });
+  });
+
+  // ---- Admin: print queue ----
+
+  const PRINT_JOB_ID_REGEX = /^[a-z0-9]{1,40}$/;
+
+  app.get('/api/admin/printqueue', (req, res) => {
+    res.json({ ok: true, jobs: printqueue.getQueueSnapshot() });
+  });
+
+  app.post('/api/admin/printqueue/:id/retry', (req, res) => {
+    const { id } = req.params;
+    if (!PRINT_JOB_ID_REGEX.test(id)) {
+      return res.status(400).json({ ok: false, error: 'invalid_id' });
+    }
+    const job = printqueue.retryJob(id);
+    if (!job) {
+      return res.status(409).json({ ok: false, error: 'not_retryable' });
+    }
+    return res.json({ ok: true, job });
+  });
+
+  app.post('/api/admin/printqueue/:id/cancel', (req, res) => {
+    const { id } = req.params;
+    if (!PRINT_JOB_ID_REGEX.test(id)) {
+      return res.status(400).json({ ok: false, error: 'invalid_id' });
+    }
+    const job = printqueue.cancelJob(id);
+    if (!job) {
+      return res.status(409).json({ ok: false, error: 'not_cancelable' });
+    }
+    return res.json({ ok: true, job });
+  });
+
+  // ---- Admin: print revenue settlement ----
+  //
+  // Payment is confirmed out-of-band (staff, physical SumUp terminal) BEFORE
+  // a print job is ever created — the job's existence is the proof of
+  // payment. A failed print is an operational/printer problem, not a
+  // refund, so it still counts as revenue. Only 'canceled' jobs (which can
+  // only happen while still 'queued', i.e. never printed) are excluded.
+  app.get('/api/admin/printsettlement', (req, res) => {
+    const jobs = printqueue.getQueueSnapshot().filter((j) => j.status !== 'canceled');
+
+    let totalPrintsSold = 0;
+    let totalRevenueCents = 0;
+    const byDay = {};
+    const byHour = {};
+
+    for (const job of jobs) {
+      totalPrintsSold += job.quantity;
+      totalRevenueCents += job.totalCents;
+
+      const date = new Date(job.createdAt);
+      const dayKey = date.toISOString().slice(0, 10);
+      const hourKey = date.getHours();
+
+      byDay[dayKey] = byDay[dayKey] || { quantity: 0, revenueCents: 0 };
+      byDay[dayKey].quantity += job.quantity;
+      byDay[dayKey].revenueCents += job.totalCents;
+
+      byHour[hourKey] = byHour[hourKey] || { quantity: 0, revenueCents: 0 };
+      byHour[hourKey].quantity += job.quantity;
+      byHour[hourKey].revenueCents += job.totalCents;
+    }
+
+    const orders = [...jobs]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((j) => ({
+        id: j.id,
+        createdAt: j.createdAt,
+        sessionId: j.sessionId,
+        quantity: j.quantity,
+        totalCents: j.totalCents,
+        status: j.status,
+      }));
+
+    res.json({
+      ok: true,
+      totalPrintsSold,
+      totalRevenueCents,
+      byDay,
+      byHour,
+      orders,
+    });
   });
 
   // ---- Misc metadata for clients ----

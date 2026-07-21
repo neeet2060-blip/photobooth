@@ -9,6 +9,9 @@ const panels = {
   frames: document.getElementById('panel-frames'),
   settings: document.getElementById('panel-settings'),
   stats: document.getElementById('panel-stats'),
+  printSettings: document.getElementById('panel-printSettings'),
+  printQueue: document.getElementById('panel-printQueue'),
+  printSettlement: document.getElementById('panel-printSettlement'),
 };
 
 tabs.forEach((btn) => {
@@ -19,16 +22,27 @@ tabs.forEach((btn) => {
     panels[btn.dataset.tab].classList.add('active');
     if (btn.dataset.tab === 'stats') loadStats();
     if (btn.dataset.tab === 'settings') loadSettings();
+    if (btn.dataset.tab === 'printSettings') loadPrintSettings();
+    if (btn.dataset.tab === 'printQueue') loadPrintQueue();
+    if (btn.dataset.tab === 'printSettlement') loadPrintSettlement();
   });
 });
 
 function applyStaticLabels() {
   tabs.forEach((btn) => {
-    const labelKey = { frames: 'adminFrames', settings: 'adminSettings', stats: 'adminStats' }[btn.dataset.tab];
+    const labelKey = {
+      frames: 'adminFrames',
+      settings: 'adminSettings',
+      stats: 'adminStats',
+      printSettings: 'adminPrintSettings',
+      printQueue: 'adminPrintQueue',
+      printSettlement: 'adminPrintSettlement',
+    }[btn.dataset.tab];
     btn.textContent = t(labelKey);
   });
   document.getElementById('frame-upload-btn').textContent = t('adminUpload');
   document.getElementById('settings-save-btn').textContent = t('adminSave');
+  document.getElementById('print-settings-save-btn').textContent = t('adminSave');
 }
 
 applyStaticLabels();
@@ -232,6 +246,227 @@ function renderUsageTable(elementId, usageMap) {
   for (const [key, count] of entries) {
     const row = document.createElement('tr');
     row.innerHTML = `<td>${key}</td><td>${count}</td>`;
+    table.appendChild(row);
+  }
+}
+
+// ---- Print settings panel ----
+
+const PRINT_SETTINGS_FIELDS = [
+  { key: 'printUnitPriceCents', label: '인화 단가 (EUR)', type: 'price' },
+  { key: 'maxPrintQuantity', label: '최대 인화 매수', type: 'number' },
+  { key: 'printMode', label: '인쇄 모드', type: 'select', options: ['folder', 'cups'] },
+  { key: 'printerName', label: '프린터 이름 (cups 모드)', type: 'text' },
+  { key: 'printMedia', label: '용지 크기', type: 'text' },
+];
+
+async function loadPrintSettings() {
+  const res = await fetch('/api/admin/settings');
+  const data = await res.json();
+  renderPrintSettingsForm(data.settings || {});
+}
+
+function renderPrintSettingsForm(settings) {
+  const form = document.getElementById('print-settings-form');
+  form.innerHTML = '';
+  for (const field of PRINT_SETTINGS_FIELDS) {
+    const row = document.createElement('div');
+    row.className = 'form-row';
+
+    const label = document.createElement('label');
+    label.textContent = field.label;
+    row.appendChild(label);
+
+    let input;
+    if (field.type === 'select') {
+      input = document.createElement('select');
+      for (const opt of field.options) {
+        const optEl = document.createElement('option');
+        optEl.value = opt;
+        optEl.textContent = opt;
+        input.appendChild(optEl);
+      }
+      input.value = settings[field.key];
+    } else if (field.type === 'price') {
+      // Cents <-> euros conversion happens only at this UI boundary.
+      input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0.01';
+      input.step = '0.01';
+      input.value = ((settings[field.key] || 0) / 100).toFixed(2);
+    } else if (field.type === 'number') {
+      input = document.createElement('input');
+      input.type = 'number';
+      input.min = '1';
+      input.value = settings[field.key];
+    } else {
+      input = document.createElement('input');
+      input.type = 'text';
+      input.value = settings[field.key] || '';
+    }
+    input.dataset.key = field.key;
+    input.dataset.type = field.type;
+    row.appendChild(input);
+    form.appendChild(row);
+  }
+}
+
+document.getElementById('print-settings-save-btn').addEventListener('click', async () => {
+  const inputs = document.querySelectorAll('#print-settings-form [data-key]');
+  const payload = {};
+  inputs.forEach((input) => {
+    if (input.dataset.type === 'price') {
+      payload[input.dataset.key] = Math.round(Number(input.value) * 100);
+    } else {
+      payload[input.dataset.key] = input.value;
+    }
+  });
+  const res = await fetch('/api/admin/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (res.ok) {
+    loadPrintSettings();
+  } else {
+    alert(t('errorGeneric'));
+  }
+});
+
+// ---- Print queue panel ----
+
+let printQueueSocket = null;
+
+function ensurePrintQueueSocket() {
+  if (printQueueSocket) return printQueueSocket;
+  printQueueSocket = window.io({ secure: true, transports: ['websocket', 'polling'] });
+  printQueueSocket.on('print-queue', (jobs) => {
+    renderPrintQueue(jobs || []);
+  });
+  return printQueueSocket;
+}
+
+async function loadPrintQueue() {
+  ensurePrintQueueSocket();
+  const res = await fetch('/api/admin/printqueue');
+  const data = await res.json();
+  renderPrintQueue(data.jobs || []);
+}
+
+function renderPrintQueue(jobs) {
+  const list = document.getElementById('print-queue-list');
+  list.innerHTML = '';
+  if (jobs.length === 0) {
+    const empty = document.createElement('div');
+    empty.textContent = t('adminPrintNoJobs');
+    list.appendChild(empty);
+    return;
+  }
+  const sorted = [...jobs].sort((a, b) => b.createdAt - a.createdAt);
+  for (const job of sorted) {
+    const row = document.createElement('div');
+    row.className = 'frame-row';
+
+    const info = document.createElement('div');
+    info.className = 'name';
+    const amount = (job.totalCents / 100).toFixed(2);
+    info.textContent = `[${job.status}] ${job.quantity}장 · €${amount} · ${new Date(job.createdAt).toLocaleString('ko-KR')}`;
+    row.appendChild(info);
+
+    if (job.status === 'failed') {
+      const retryBtn = document.createElement('button');
+      retryBtn.textContent = t('adminPrintRetry');
+      retryBtn.addEventListener('click', () => retryPrintJob(job.id));
+      row.appendChild(retryBtn);
+    }
+    if (job.status === 'queued') {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'danger';
+      cancelBtn.textContent = t('adminPrintCancel');
+      cancelBtn.addEventListener('click', () => cancelPrintJob(job.id));
+      row.appendChild(cancelBtn);
+    }
+
+    list.appendChild(row);
+  }
+}
+
+async function retryPrintJob(id) {
+  await fetch(`/api/admin/printqueue/${id}/retry`, { method: 'POST' });
+  loadPrintQueue();
+}
+
+async function cancelPrintJob(id) {
+  await fetch(`/api/admin/printqueue/${id}/cancel`, { method: 'POST' });
+  loadPrintQueue();
+}
+
+// ---- Print settlement panel ----
+
+async function loadPrintSettlement() {
+  const res = await fetch('/api/admin/printsettlement');
+  const data = await res.json();
+  renderPrintSettlement(data);
+}
+
+function renderPrintSettlement(data) {
+  const cards = document.getElementById('print-settlement-cards');
+  cards.innerHTML = '';
+  const entries = [
+    [t('adminPrintTotalSold'), data.totalPrintsSold || 0],
+    [t('adminPrintTotalRevenue'), `€${((data.totalRevenueCents || 0) / 100).toFixed(2)}`],
+  ];
+  for (const [label, value] of entries) {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    card.innerHTML = `<div class="value">${value}</div><div>${label}</div>`;
+    cards.appendChild(card);
+  }
+
+  document.getElementById('print-by-day-title').textContent = t('adminPrintByDay');
+  document.getElementById('print-by-hour-title').textContent = t('adminPrintByHour');
+  document.getElementById('print-orders-title').textContent = t('adminPrintOrders');
+
+  renderByBucketTable('print-by-day-table', data.byDay || {});
+  renderByBucketTable('print-by-hour-table', data.byHour || {});
+  renderOrdersTable(data.orders || []);
+}
+
+function renderByBucketTable(elementId, bucketMap) {
+  const table = document.getElementById(elementId);
+  table.innerHTML = '';
+  const header = document.createElement('tr');
+  header.innerHTML = '<th>구간</th><th>매수</th><th>매출</th>';
+  table.appendChild(header);
+  const entries = Object.entries(bucketMap);
+  if (entries.length === 0) {
+    const row = document.createElement('tr');
+    row.innerHTML = '<td colspan="3">데이터 없음</td>';
+    table.appendChild(row);
+    return;
+  }
+  for (const [key, bucket] of entries) {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${key}</td><td>${bucket.quantity}</td><td>€${(bucket.revenueCents / 100).toFixed(2)}</td>`;
+    table.appendChild(row);
+  }
+}
+
+function renderOrdersTable(orders) {
+  const table = document.getElementById('print-orders-table');
+  table.innerHTML = '';
+  const header = document.createElement('tr');
+  header.innerHTML = '<th>ID</th><th>시간</th><th>세션</th><th>매수</th><th>금액</th><th>상태</th>';
+  table.appendChild(header);
+  if (orders.length === 0) {
+    const row = document.createElement('tr');
+    row.innerHTML = '<td colspan="6">데이터 없음</td>';
+    table.appendChild(row);
+    return;
+  }
+  for (const order of orders) {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${order.id}</td><td>${new Date(order.createdAt).toLocaleString('ko-KR')}</td><td>${order.sessionId}</td><td>${order.quantity}</td><td>€${(order.totalCents / 100).toFixed(2)}</td><td>${order.status}</td>`;
     table.appendChild(row);
   }
 }

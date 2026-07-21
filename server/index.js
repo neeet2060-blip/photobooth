@@ -12,6 +12,7 @@ const { getOrCreateCerts } = require('./certs');
 const { getLanIp } = require('./ip');
 const { registerRoutes } = require('./routes');
 const stateMachine = require('./state');
+const printqueue = require('./printqueue');
 
 const HTTPS_PORT = Number(process.env.PORT) || 3000;
 const HTTP_PORT = Number(process.env.HTTP_PORT) || 3001;
@@ -61,6 +62,20 @@ function runEffect(effect) {
       break;
     case 'await-final-upload':
       // No-op: client uploads via POST /api/final, which dispatches finalSaved.
+      break;
+    case 'print-order-confirmed':
+      // Staff confirmed payment on the physical terminal (out-of-band, no
+      // card data touches this app). enqueueJob eagerly copies print.jpg
+      // into a stable staging path before returning, so it's safe even if
+      // the idle/QR sweep deletes the session folder right after this.
+      printqueue.enqueueJob({
+        sessionId: effect.sessionId,
+        file: path.join(store.PHOTOS_DIR, effect.sessionId, 'print.jpg'),
+        quantity: effect.quantity,
+        unitPriceCents: effect.unitPriceCents,
+      }).catch((err) => {
+        console.error('Failed to enqueue print job:', err);
+      });
       break;
     default:
       break;
@@ -159,11 +174,18 @@ io.attach(httpServer);
 
 io.on('connection', (socket) => {
   socket.emit('state', sessionState);
+  socket.emit('print-queue', printqueue.getQueueSnapshot());
 
   socket.on('action', (action) => {
     if (!action || typeof action.type !== 'string') return;
     dispatch(action);
   });
+});
+
+// Fires after every print-queue mutation (job creation from the
+// 'print-order-confirmed' effect above, or admin retry/cancel routes).
+printqueue.onQueueChange((jobs) => {
+  io.emit('print-queue', jobs);
 });
 
 // ---- Idle / QR timeout sweep ----
@@ -210,8 +232,42 @@ function sweepOldPhotos() {
   });
 }
 
+// Staged print copies and folder-mode output are visitor photos too, so they
+// must honour the same retention promise shown on the download page. Files
+// belonging to a job that is still queued or printing are kept regardless of
+// age, so a slow or broken printer never loses pending work.
+function sweepOldPrintFiles() {
+  const settings = store.readSettings();
+  const maxAgeMs = settings.autoDeleteHours * 60 * 60 * 1000;
+  const activeJobIds = printqueue
+    .getQueueSnapshot()
+    .filter((job) => job.status === 'queued' || job.status === 'printing')
+    .map((job) => job.id);
+
+  for (const dir of [printqueue.STAGING_DIR, store.PRINT_OUTBOX_DIR]) {
+    fs.readdir(dir, { withFileTypes: true }, (err, entries) => {
+      if (err) return;
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        // Both naming schemes embed the job id: "<jobId>.jpg" (staging) and
+        // "<timestamp>-<jobId>-x<copies>.jpg" (outbox).
+        if (activeJobIds.some((jobId) => entry.name.includes(jobId))) continue;
+        const filePath = path.join(dir, entry.name);
+        fs.stat(filePath, (statErr, stats) => {
+          if (statErr) return;
+          if (Date.now() - stats.mtimeMs > maxAgeMs) {
+            fs.rm(filePath, { force: true }, () => {});
+          }
+        });
+      }
+    });
+  }
+}
+
 setInterval(sweepOldPhotos, AUTO_DELETE_SWEEP_INTERVAL_MS);
 sweepOldPhotos();
+setInterval(sweepOldPrintFiles, AUTO_DELETE_SWEEP_INTERVAL_MS);
+sweepOldPrintFiles();
 
 // ---- Startup ----
 

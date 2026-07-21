@@ -70,6 +70,88 @@ export async function composeFrame({ canvas, layoutName, photoUrls, frameUrl, fi
   return canvas;
 }
 
+// ---- Print-ready sheet (dye-sub 4x6in @ 300dpi = 1200x1800px) ----
+
+const PRINT_SHEET_WIDTH = 1200;
+const PRINT_SHEET_HEIGHT = 1800;
+const STRIP_HALF_WIDTH = 600; // each of the two side-by-side 2x6 strips
+const GRID_TOP_HEIGHT = 1200; // scaled-down square, placed at the top
+const CUT_LINE_DASH = [12, 10];
+const CAPTION_TEXT = 'Taste of Korea';
+
+/**
+ * Composites a print-ready 1200x1800 (4x6in @ 300dpi) sheet for the dye-sub
+ * printer, reusing composeFrame's screen-resolution output as the source
+ * image (drawn onto an offscreen canvas, then scaled/copied here) rather
+ * than duplicating its drawing logic.
+ *
+ * - 'strip' layouts (screen output 1200x3600) are scaled down to 600x1800
+ *   and drawn twice, side by side, with a dashed cut line down the middle
+ *   so staff can cut the sheet into two 2x6 strips.
+ * - 'grid' layouts (screen output 2400x2400) are scaled to 1200x1200 and
+ *   placed at the top; the remaining 1200x600 band is plain white with a
+ *   small centered caption (no cut line).
+ *
+ * @param {object} opts
+ * @param {HTMLCanvasElement} opts.canvas - destination print canvas
+ * @param {'strip'|'grid'} opts.layoutName
+ * @param {string[]} opts.photoUrls
+ * @param {string} opts.frameUrl
+ * @param {string} [opts.filterCss]
+ * @returns {Promise<HTMLCanvasElement>}
+ */
+export async function composePrintSheet({ canvas, layoutName, photoUrls, frameUrl, filterCss }) {
+  const offscreen = document.createElement('canvas');
+  await composeFrame({ canvas: offscreen, layoutName, photoUrls, frameUrl, filterCss });
+
+  canvas.width = PRINT_SHEET_WIDTH;
+  canvas.height = PRINT_SHEET_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (layoutName === 'strip') {
+    ctx.drawImage(offscreen, 0, 0, offscreen.width, offscreen.height, 0, 0, STRIP_HALF_WIDTH, PRINT_SHEET_HEIGHT);
+    ctx.drawImage(
+      offscreen,
+      0,
+      0,
+      offscreen.width,
+      offscreen.height,
+      STRIP_HALF_WIDTH,
+      0,
+      STRIP_HALF_WIDTH,
+      PRINT_SHEET_HEIGHT,
+    );
+
+    ctx.save();
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 2;
+    ctx.setLineDash(CUT_LINE_DASH);
+    ctx.beginPath();
+    ctx.moveTo(STRIP_HALF_WIDTH, 0);
+    ctx.lineTo(STRIP_HALF_WIDTH, PRINT_SHEET_HEIGHT);
+    ctx.stroke();
+    ctx.restore();
+  } else if (layoutName === 'grid') {
+    ctx.drawImage(offscreen, 0, 0, offscreen.width, offscreen.height, 0, 0, GRID_TOP_HEIGHT, GRID_TOP_HEIGHT);
+
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, GRID_TOP_HEIGHT, PRINT_SHEET_WIDTH, PRINT_SHEET_HEIGHT - GRID_TOP_HEIGHT);
+    ctx.fillStyle = '#222';
+    ctx.font = '48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(CAPTION_TEXT, PRINT_SHEET_WIDTH / 2, GRID_TOP_HEIGHT + (PRINT_SHEET_HEIGHT - GRID_TOP_HEIGHT) / 2);
+    ctx.restore();
+  } else {
+    throw new Error(`Unknown layout for print sheet: ${layoutName}`);
+  }
+
+  return canvas;
+}
+
 export function canvasToJpegBlob(canvas, quality = 0.92) {
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);

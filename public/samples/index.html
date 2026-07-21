@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>프레임 시안 10종</title>
+<style>
+  :root {
+    --bg: #101014;
+    --panel: #1a1a20;
+    --text: #f0f0f2;
+    --muted: #9a9aa5;
+    --accent: #ff6f91;
+    --stage-h: 420px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 40px 24px 80px;
+  }
+  header {
+    max-width: 1300px;
+    margin: 0 auto 12px;
+    text-align: center;
+  }
+  h1 {
+    font-size: 32px;
+    margin: 0 0 8px;
+    letter-spacing: 1px;
+  }
+  header p {
+    color: var(--muted);
+    margin: 0;
+    font-size: 15px;
+  }
+  .legend {
+    max-width: 1300px;
+    margin: 0 auto 32px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 10px 16px;
+  }
+  .legend b { color: var(--text); }
+
+  /* Flex-wrap: strip cards are narrow, grid cards are wide — a tidy contact-sheet layout
+     where every card shares the same STAGE height, so all 10 designs compare at a glance. */
+  .gallery {
+    max-width: 1300px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  /* Uniform fixed-height stage; the frame inside is sized to FIT this height
+     while preserving its true aspect ratio (strip => narrow, grid => square). */
+  .stage {
+    height: var(--stage-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .frame-wrap {
+    position: relative;
+    height: var(--stage-h);
+    background: #000;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  /* strip aspect 1200:3600 = 1:3 -> width = height / 3 */
+  .frame-wrap.strip-type { width: calc(var(--stage-h) / 3); }
+  /* grid aspect 2400:2400 = 1:1 -> width = height */
+  .frame-wrap.grid-type { width: var(--stage-h); }
+
+  .slot {
+    position: absolute;
+  }
+  .frame-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+    display: block;
+  }
+  .label {
+    text-align: center;
+  }
+  .label .num {
+    color: var(--accent);
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .label .name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* Strip slot geometry: viewBox 0 0 1200 3600, slots w=1050 h=780 x=75, y=75/930/1785/2640 */
+  .strip-type .slot { left: 6.25%; width: 87.5%; height: 21.6667%; }
+  .strip-type .slot.s0 { top: 2.0833%; }
+  .strip-type .slot.s1 { top: 25.8333%; }
+  .strip-type .slot.s2 { top: 49.5833%; }
+  .strip-type .slot.s3 { top: 73.3333%; }
+
+  /* Grid slot geometry: viewBox 0 0 2400 2400, slots w=h=1095 at (75,75) (1230,75) (75,1230) (1230,1230) */
+  .grid-type .slot { width: 45.625%; height: 45.625%; }
+  .grid-type .slot.g0 { left: 3.125%; top: 3.125%; }
+  .grid-type .slot.g1 { left: 51.25%;  top: 3.125%; }
+  .grid-type .slot.g2 { left: 3.125%; top: 51.25%; }
+  .grid-type .slot.g3 { left: 51.25%;  top: 51.25%; }
+
+  .ph { width: 100%; height: 100%; }
+  .ph0 { background: linear-gradient(135deg,#ff9a9e,#fecfef); }
+  .ph1 { background: linear-gradient(135deg,#a1c4fd,#c2e9fb); }
+  .ph2 { background: linear-gradient(135deg,#fbc2eb,#a6c1ee); }
+  .ph3 { background: linear-gradient(135deg,#fddb92,#d1fdff); }
+
+  @media (max-width: 700px) {
+    :root { --stage-h: 320px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>프레임 시안 10종</h1>
+  <p>Taste of Korea 인생네컷 포토부스 · 샘플 프레임 비교 페이지 (선택용, 실제 등록 전)</p>
+</header>
+
+<div class="legend">
+  <b>회색/투명 영역</b> = 실제 방문객 사진이 들어갈 슬롯 · 모든 카드는 동일한 미리보기 높이(<b id="stage-h-label"></b>)로 정렬되어 있어 10종을 한눈에 비교할 수 있습니다.
+</div>
+
+<div class="gallery" id="gallery"></div>
+
+<script>
+  document.getElementById('stage-h-label').textContent =
+    getComputedStyle(document.documentElement).getPropertyValue('--stage-h').trim();
+
+  const FRAMES = [
+    { n: 1, file: 's01-photocard.svg', name: '포토카드', type: 'strip' },
+    { n: 2, file: 's02-stage.svg', name: '스테이지', type: 'grid' },
+    { n: 3, file: 's03-y2k.svg', name: 'Y2K 스파클', type: 'strip' },
+    { n: 4, file: 's04-album.svg', name: '앨범 자켓', type: 'grid' },
+    { n: 5, file: 's05-fansign.svg', name: '팬사인회', type: 'strip' },
+    { n: 6, file: 's06-neon-seoul.svg', name: '네온 서울', type: 'strip' },
+    { n: 7, file: 's07-giwa.svg', name: '기와', type: 'grid' },
+    { n: 8, file: 's08-dancheong.svg', name: '단청', type: 'grid' },
+    { n: 9, file: 's09-hangul.svg', name: '한글 타이포', type: 'strip' },
+    { n: 10, file: 's10-cherry.svg', name: '벚꽃', type: 'grid' },
+  ];
+
+  const slotClasses = t => t === 'strip' ? ['s0','s1','s2','s3'] : ['g0','g1','g2','g3'];
+
+  const gallery = document.getElementById('gallery');
+
+  FRAMES.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const stage = document.createElement('div');
+    stage.className = 'stage';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'frame-wrap ' + (f.type === 'strip' ? 'strip-type' : 'grid-type');
+
+    slotClasses(f.type).forEach((cls, i) => {
+      const slot = document.createElement('div');
+      slot.className = 'slot ' + cls;
+      const ph = document.createElement('div');
+      ph.className = 'ph ph' + i;
+      slot.appendChild(ph);
+      wrap.appendChild(slot);
+    });
+
+    const img = document.createElement('img');
+    img.className = 'frame-svg';
+    img.src = '/assets/samples/' + f.file;
+    img.alt = f.name;
+    wrap.appendChild(img);
+
+    stage.appendChild(wrap);
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.innerHTML = '<span class="num">' + f.n + '.</span><span class="name">' + f.name +
+      ' (' + (f.type === 'strip' ? '스트립' : '그리드') + ')</span>';
+
+    card.appendChild(stage);
+    card.appendChild(label);
+    gallery.appendChild(card);
+  });
+</script>
+
+</body>
+</html>

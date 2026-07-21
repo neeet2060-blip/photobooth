@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 3600" width="1200" height="3600">
+  <defs>
+    <linearGradient id="s01-holo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffb3d9"/>
+      <stop offset="25%" stop-color="#b3d4ff"/>
+      <stop offset="50%" stop-color="#d3b3ff"/>
+      <stop offset="75%" stop-color="#b3ffe6"/>
+      <stop offset="100%" stop-color="#ffd9b3"/>
+    </linearGradient>
+    <linearGradient id="s01-footer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#241f2b"/>
+      <stop offset="100%" stop-color="#100e14"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cream background with 4 transparent slot windows knocked out -->
+  <path fill-rule="evenodd" fill="#faf6ef"
+    d="M28,0 H1172 A28,28 0 0 1 1200,28 V3572 A28,28 0 0 1 1172,3600 H28 A28,28 0 0 1 0,3572 V28 A28,28 0 0 1 28,0 Z
+       M75,75 H1125 V855 H75 Z
+       M75,930 H1125 V1710 H75 Z
+       M75,1785 H1125 V2565 H75 Z
+       M75,2640 H1125 V3420 H75 Z"/>
+
+  <!-- Bold holographic outer edge (24px, mostly outside the print area) -->
+  <rect x="14" y="14" width="1172" height="3572" rx="24" fill="none" stroke="url(#s01-holo)" stroke-width="24"/>
+
+  <!-- Decisive dark keylines around each slot -->
+  <g fill="none" stroke="#2a2620" stroke-width="10">
+    <rect x="75" y="75" width="1050" height="780"/>
+    <rect x="75" y="930" width="1050" height="780"/>
+    <rect x="75" y="1785" width="1050" height="780"/>
+    <rect x="75" y="2640" width="1050" height="780"/>
+  </g>
+
+  <!-- Top band: serial + mark -->
+  <text x="90" y="52" font-family="'Courier New',monospace" font-size="28" font-weight="700" letter-spacing="2" fill="#3a352c">NO. 001</text>
+  <text x="1110" y="52" text-anchor="end" font-family="sans-serif" font-size="22" font-weight="700" letter-spacing="3" fill="#3a352c">TASTE OF KOREA</text>
+
+  <!-- Holo sparkles in the inter-slot gaps (safe zones) -->
+  <g fill="url(#s01-holo)">
+    <path d="M1125,875 l10,15 15,10 -15,10 -10,15 -10,-15 -15,-10 15,-10 Z"/>
+    <path d="M1125,1730 l10,15 15,10 -15,10 -10,15 -10,-15 -15,-10 15,-10 Z"/>
+    <path d="M1125,2585 l10,15 15,10 -15,10 -10,15 -10,-15 -15,-10 15,-10 Z"/>
+  </g>
+
+  <!-- Bottom band: bold near-black branded footer, strong contrast against the cream body -->
+  <rect x="14" y="3438" width="1172" height="148" rx="10" fill="url(#s01-footer)"/>
+  <line x1="450" y1="3480" x2="750" y2="3480" stroke="url(#s01-holo)" stroke-width="4"/>
+  <text x="600" y="3535" text-anchor="middle" font-family="sans-serif" font-size="50" font-weight="800" letter-spacing="4" fill="url(#s01-holo)">TASTE OF KOREA</text>
+  <text x="600" y="3568" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif" font-size="24" fill="#e8e2f2">인생네컷 포토카드 · NO. 001</text>
+</svg>

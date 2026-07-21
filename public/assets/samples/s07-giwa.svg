@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 2400" width="2400" height="2400">
+  <defs>
+    <linearGradient id="s07-hanji" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ecd7ab"/>
+      <stop offset="100%" stop-color="#e0c290"/>
+    </linearGradient>
+    <pattern id="s07-tile" width="90" height="45" patternUnits="userSpaceOnUse">
+      <path d="M0,45 Q22.5,0 45,45 Q67.5,0 90,45 Z" fill="#28323c"/>
+      <path d="M0,45 Q22.5,10 45,45" fill="none" stroke="#1a2128" stroke-width="1.5"/>
+    </pattern>
+  </defs>
+
+  <path fill-rule="evenodd" fill="url(#s07-hanji)"
+    d="M0,0 H2400 V2400 H0 Z
+       M75,75 H1170 V1170 H75 Z
+       M1230,75 H2325 V1170 H1230 Z
+       M75,1230 H1170 V2325 H75 Z
+       M1230,1230 H2325 V2325 H1230 Z"/>
+
+  <!-- Giwa roof-tile band across the top margin (0-75, never touches a slot), thick and dark -->
+  <rect x="0" y="0" width="2400" height="60" fill="url(#s07-tile)"/>
+  <rect x="0" y="58" width="2400" height="10" fill="#1a2128"/>
+
+  <!-- Dancheong accent borders as bold color frames -->
+  <g fill="none" stroke-width="20">
+    <rect x="75" y="75" width="1095" height="1095" stroke="#a8302b"/>
+    <rect x="1230" y="75" width="1095" height="1095" stroke="#2a6d47"/>
+    <rect x="75" y="1230" width="1095" height="1095" stroke="#2a5487"/>
+    <rect x="1230" y="1230" width="1095" height="1095" stroke="#c99527"/>
+  </g>
+
+  <!-- Center ornament in the gap cross -->
+  <circle cx="1200" cy="1200" r="64" fill="#ecd7ab" stroke="#a8302b" stroke-width="6"/>
+  <circle cx="1200" cy="1200" r="46" fill="none" stroke="#c99527" stroke-width="4"/>
+  <text x="1200" y="1212" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif" font-size="28" font-weight="700" fill="#2e2016">기와</text>
+
+  <!-- Small corner accents -->
+  <circle cx="2325" cy="2325" r="16" fill="#2a5487"/>
+  <circle cx="75" cy="2325" r="16" fill="#c99527"/>
+  <circle cx="75" cy="75" r="16" fill="#a8302b"/>
+  <circle cx="2325" cy="75" r="16" fill="#2a6d47"/>
+
+  <text x="1200" y="2372" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="700" letter-spacing="4" fill="#3d2b1c">TASTE OF KOREA · 기와</text>
+</svg>

@@ -26,6 +26,10 @@ const PHASES = Object.freeze({
 const MIN_PHOTOS_FOR_EARLY_FINISH = 4;
 const PICKS_REQUIRED = 4;
 const MAX_RETAKE_SHOTS_OVER_TOTAL = 8; // allow up to shotsTotal + this many extra via retake
+// Fallbacks only, used if context.settings omits these keys; store.js's
+// DEFAULT_SETTINGS is the source of truth in the running app.
+const DEFAULT_MAX_PRINT_QUANTITY = 10;
+const DEFAULT_PRINT_UNIT_PRICE_CENTS = 300;
 
 const FILTERS = Object.freeze([
   { id: 'none', label: 'No Filter', css: 'none' },
@@ -57,6 +61,7 @@ function createInitialState() {
     finalToken: null,
     qrDataUrl: null,
     error: null,
+    printOrder: null, // { stage: 'quantity' | 'awaiting_payment', quantity: number } | null
   };
 }
 
@@ -278,6 +283,63 @@ function applyAction(state, action, context) {
         filterId: state.filterId,
       });
       const next = touch({ ...state, phase: PHASES.QR, finalUrl, finalToken, qrDataUrl });
+      return { state: next, effects };
+    }
+
+    case 'openPrintOrder': {
+      if (state.phase !== PHASES.QR) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      if (state.printOrder !== null) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const next = touch({ ...state, printOrder: { stage: 'quantity', quantity: 1 } });
+      return { state: next, effects };
+    }
+
+    case 'setPrintQuantity': {
+      if (state.phase !== PHASES.QR || !state.printOrder || state.printOrder.stage !== 'quantity') {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const { quantity } = payload;
+      const maxPrintQuantity = settings.maxPrintQuantity ?? DEFAULT_MAX_PRINT_QUANTITY;
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxPrintQuantity) {
+        return { state: withError(state, 'invalid_quantity'), effects };
+      }
+      const next = touch({ ...state, printOrder: { ...state.printOrder, quantity } });
+      return { state: next, effects };
+    }
+
+    case 'confirmPrintQuantity': {
+      if (state.phase !== PHASES.QR || !state.printOrder || state.printOrder.stage !== 'quantity') {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const next = touch({ ...state, printOrder: { ...state.printOrder, stage: 'awaiting_payment' } });
+      return { state: next, effects };
+    }
+
+    case 'cancelPrintOrder': {
+      if (state.phase !== PHASES.QR || state.printOrder === null) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      return { state: touch({ ...state, printOrder: null }), effects };
+    }
+
+    case 'confirmPrintPayment': {
+      if (state.phase !== PHASES.QR || !state.printOrder || state.printOrder.stage !== 'awaiting_payment') {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const { quantity } = state.printOrder;
+      const unitPriceCents = settings.printUnitPriceCents ?? DEFAULT_PRINT_UNIT_PRICE_CENTS;
+      const totalCents = quantity * unitPriceCents;
+      effects.push({
+        type: 'print-order-confirmed',
+        sessionId: state.sessionId,
+        quantity,
+        unitPriceCents,
+        totalCents,
+      });
+      const next = touch({ ...state, printOrder: null });
       return { state: next, effects };
     }
 

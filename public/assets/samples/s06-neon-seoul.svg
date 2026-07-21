@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 3600" width="1200" height="3600">
+  <defs>
+    <linearGradient id="s06-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#04050f"/>
+      <stop offset="100%" stop-color="#0a0d28"/>
+    </linearGradient>
+    <linearGradient id="s06-neonPink" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff2fb8"/>
+      <stop offset="100%" stop-color="#ff8fd4"/>
+    </linearGradient>
+    <linearGradient id="s06-neonCyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2feaff"/>
+      <stop offset="100%" stop-color="#8ffcff"/>
+    </linearGradient>
+  </defs>
+
+  <path fill-rule="evenodd" fill="url(#s06-bg)"
+    d="M0,0 H1200 V3600 H0 Z
+       M75,75 H1125 V855 H75 Z
+       M75,930 H1125 V1710 H75 Z
+       M75,1785 H1125 V2565 H75 Z
+       M75,2640 H1125 V3420 H75 Z"/>
+
+  <!-- Bold neon-outlined slots, layered strokes to fake glow (all confined to margins/gaps) -->
+  <g fill="none" stroke="url(#s06-neonPink)">
+    <rect x="75" y="75" width="1050" height="780" stroke-width="8"/>
+    <rect x="75" y="1785" width="1050" height="780" stroke-width="8"/>
+    <rect x="60" y="60" width="1080" height="810" stroke-width="2" opacity="0.5"/>
+    <rect x="60" y="1770" width="1080" height="810" stroke-width="2" opacity="0.5"/>
+  </g>
+  <g fill="none" stroke="url(#s06-neonCyan)">
+    <rect x="75" y="930" width="1050" height="780" stroke-width="8"/>
+    <rect x="75" y="2640" width="1050" height="780" stroke-width="8"/>
+    <rect x="60" y="915" width="1080" height="810" stroke-width="2" opacity="0.5"/>
+    <rect x="60" y="2625" width="1080" height="810" stroke-width="2" opacity="0.5"/>
+  </g>
+
+  <!-- Neon Hangul signage, generic words, placed in inter-slot gaps only -->
+  <text x="600" y="905" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif"
+    font-size="52" font-weight="800" fill="#ff2fb8">서울</text>
+  <text x="600" y="1760" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif"
+    font-size="46" font-weight="800" fill="#2feaff">야경</text>
+
+  <!-- City skyline silhouette confined to the bottom margin band (3420-3600) -->
+  <rect x="0" y="3420" width="1200" height="180" fill="#04050f"/>
+  <g fill="#090a1e" stroke="url(#s06-neonPink)" stroke-width="2.5">
+    <rect x="80" y="3468" width="80" height="112"/>
+    <rect x="170" y="3436" width="60" height="144"/>
+    <rect x="240" y="3494" width="100" height="86"/>
+    <rect x="350" y="3452" width="65" height="128"/>
+    <polygon points="405,3480 460,3424 515,3480"/>
+    <rect x="525" y="3462" width="85" height="118"/>
+    <rect x="620" y="3500" width="65" height="80"/>
+    <rect x="695" y="3442" width="60" height="138"/>
+    <rect x="765" y="3480" width="100" height="100"/>
+    <rect x="875" y="3452" width="65" height="128"/>
+    <polygon points="935,3480 995,3424 1055,3480"/>
+    <rect x="1060" y="3494" width="60" height="86"/>
+  </g>
+
+  <text x="600" y="3555" text-anchor="middle" font-family="sans-serif" font-size="34" font-weight="800" letter-spacing="4" fill="#8ffcff">TASTE OF KOREA</text>
+</svg>

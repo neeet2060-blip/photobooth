@@ -12,6 +12,8 @@ const SETTINGS = {
   qrTimeoutSec: 90,
   defaultLang: 'ko',
   autoDeleteHours: 24,
+  printUnitPriceCents: 300,
+  maxPrintQuantity: 10,
 };
 
 const FRAMES = [
@@ -298,4 +300,157 @@ test('unknown action type sets an error and leaves state otherwise unchanged', (
   const { state } = run(initial, 'totallyBogus');
   assert.equal(state.error, 'unknown_action');
   assert.equal(state.phase, PHASES.IDLE);
+});
+
+// ---- Print-order actions ----
+
+function toQr() {
+  const state = toFilter();
+  return run(state, 'finalSaved', {
+    finalUrl: 'https://x/p/abc',
+    finalToken: 'abc',
+    qrDataUrl: 'data:x',
+  }).state;
+}
+
+test('createInitialState includes printOrder: null', () => {
+  const state = createInitialState();
+  assert.equal(state.printOrder, null);
+});
+
+test('openPrintOrder: qr -> printOrder quantity stage, defaults to quantity 1', () => {
+  const qr = toQr();
+  const { state } = run(qr, 'openPrintOrder');
+  assert.deepEqual(state.printOrder, { stage: 'quantity', quantity: 1 });
+  assert.equal(state.phase, PHASES.QR);
+});
+
+test('openPrintOrder: rejected outside qr phase', () => {
+  const state = toFilter();
+  const { state: next } = run(state, 'openPrintOrder');
+  assert.equal(next.error, 'invalid_action');
+});
+
+test('openPrintOrder: rejected when a print order is already open', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const { state } = run(opened, 'openPrintOrder');
+  assert.equal(state.error, 'invalid_action');
+});
+
+test('setPrintQuantity: rejected outside qr phase', () => {
+  const state = toFilter();
+  const { state: next } = run(state, 'setPrintQuantity', { quantity: 2 });
+  assert.equal(next.error, 'invalid_action');
+});
+
+test('setPrintQuantity: rejected when not in quantity sub-stage', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const confirmed = run(opened, 'confirmPrintQuantity').state;
+  const { state } = run(confirmed, 'setPrintQuantity', { quantity: 3 });
+  assert.equal(state.error, 'invalid_action');
+});
+
+test('setPrintQuantity: rejects 0 and max+1, accepts bounds 1 and maxPrintQuantity', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+
+  const zero = run(opened, 'setPrintQuantity', { quantity: 0 }).state;
+  assert.equal(zero.error, 'invalid_quantity');
+
+  const overMax = run(opened, 'setPrintQuantity', { quantity: SETTINGS.maxPrintQuantity + 1 }).state;
+  assert.equal(overMax.error, 'invalid_quantity');
+
+  const atMin = run(opened, 'setPrintQuantity', { quantity: 1 }).state;
+  assert.equal(atMin.printOrder.quantity, 1);
+
+  const atMax = run(opened, 'setPrintQuantity', { quantity: SETTINGS.maxPrintQuantity }).state;
+  assert.equal(atMax.printOrder.quantity, SETTINGS.maxPrintQuantity);
+});
+
+test('setPrintQuantity: rejects non-integer quantity', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const { state } = run(opened, 'setPrintQuantity', { quantity: 2.5 });
+  assert.equal(state.error, 'invalid_quantity');
+});
+
+test('confirmPrintQuantity: rejected outside quantity sub-stage', () => {
+  const qr = toQr();
+  const { state } = run(qr, 'confirmPrintQuantity');
+  assert.equal(state.error, 'invalid_action');
+});
+
+test('confirmPrintQuantity: quantity -> awaiting_payment, keeps quantity', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const withQty = run(opened, 'setPrintQuantity', { quantity: 3 }).state;
+  const { state } = run(withQty, 'confirmPrintQuantity');
+  assert.deepEqual(state.printOrder, { stage: 'awaiting_payment', quantity: 3 });
+});
+
+test('cancelPrintOrder: clears printOrder from the quantity sub-stage', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const { state } = run(opened, 'cancelPrintOrder');
+  assert.equal(state.printOrder, null);
+  assert.equal(state.phase, PHASES.QR);
+});
+
+test('cancelPrintOrder: clears printOrder from the awaiting_payment sub-stage', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const confirmed = run(opened, 'confirmPrintQuantity').state;
+  const { state } = run(confirmed, 'cancelPrintOrder');
+  assert.equal(state.printOrder, null);
+});
+
+test('cancelPrintOrder: rejected when no print order is open', () => {
+  const qr = toQr();
+  const { state } = run(qr, 'cancelPrintOrder');
+  assert.equal(state.error, 'invalid_action');
+});
+
+test('confirmPrintPayment: rejected outside awaiting_payment sub-stage', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const { state } = run(opened, 'confirmPrintPayment');
+  assert.equal(state.error, 'invalid_action');
+});
+
+test('confirmPrintPayment: full happy path, correct effect payload and totalCents, clears printOrder', () => {
+  const qr = toQr();
+  let state = run(qr, 'openPrintOrder').state;
+  state = run(state, 'setPrintQuantity', { quantity: 3 }).state;
+  state = run(state, 'confirmPrintQuantity').state;
+  const customCtx = { settings: { ...SETTINGS, printUnitPriceCents: 300 }, frames: FRAMES };
+  const { state: next, effects } = applyAction(state, { type: 'confirmPrintPayment' }, customCtx);
+
+  assert.equal(next.printOrder, null);
+  assert.equal(next.phase, PHASES.QR);
+  const effect = effects.find((e) => e.type === 'print-order-confirmed');
+  assert.ok(effect);
+  assert.equal(effect.sessionId, state.sessionId);
+  assert.equal(effect.quantity, 3);
+  assert.equal(effect.unitPriceCents, 300);
+  assert.equal(effect.totalCents, 900);
+});
+
+test('restart: also clears printOrder', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const withQty = run(opened, 'setPrintQuantity', { quantity: 5 }).state;
+  const { state } = run(withQty, 'restart');
+  assert.equal(state.phase, PHASES.IDLE);
+  assert.equal(state.printOrder, null);
+});
+
+test('forceReset: also clears printOrder', () => {
+  const qr = toQr();
+  const opened = run(qr, 'openPrintOrder').state;
+  const { state, effects } = run(opened, 'forceReset');
+  assert.equal(state.phase, PHASES.IDLE);
+  assert.equal(state.printOrder, null);
+  assert.ok(effects.some((e) => e.type === 'session-abandoned'));
 });

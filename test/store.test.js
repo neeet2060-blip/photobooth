@@ -24,7 +24,7 @@ after(() => {
 
 beforeEach(() => {
   // Reset each JSON file between tests for isolation.
-  for (const file of ['settings.json', 'frames.json', 'stats.json', 'tokens.json']) {
+  for (const file of ['settings.json', 'frames.json', 'stats.json', 'tokens.json', 'printjobs.json']) {
     const p = path.join(tmpDir, file);
     if (fs.existsSync(p)) fs.rmSync(p);
   }
@@ -91,6 +91,38 @@ test('recordSessionCompleted increments completed count and per-frame/filter usa
   assert.equal(stats.frameUsage['default-strip'], 2);
   assert.equal(stats.filterUsage.warm, 1);
   assert.equal(stats.filterUsage.bw, 1);
+});
+
+test('readSettings backfills printing keys missing from an old settings.json', () => {
+  const filePath = path.join(tmpDir, 'settings.json');
+  // Simulate a settings.json written before the printing add-on existed.
+  fs.writeFileSync(filePath, JSON.stringify({ shotsTotal: 6, countdownSeconds: 5 }));
+  const settings = store.readSettings();
+  assert.equal(settings.shotsTotal, 6);
+  assert.equal(settings.countdownSeconds, 5);
+  assert.equal(settings.printUnitPriceCents, store.DEFAULT_SETTINGS.printUnitPriceCents);
+  assert.equal(settings.maxPrintQuantity, store.DEFAULT_SETTINGS.maxPrintQuantity);
+  assert.equal(settings.printMode, store.DEFAULT_SETTINGS.printMode);
+  assert.equal(settings.printerName, store.DEFAULT_SETTINGS.printerName);
+  assert.equal(settings.printMedia, store.DEFAULT_SETTINGS.printMedia);
+});
+
+test('readPrintJobs returns an empty array by default and persists the file', () => {
+  const jobs = store.readPrintJobs();
+  assert.deepEqual(jobs, []);
+  assert.ok(fs.existsSync(store.PRINTJOBS_FILE));
+});
+
+test('writePrintJobs persists a job list and readPrintJobs returns it', () => {
+  const job = { id: 'p1', status: 'queued' };
+  store.writePrintJobs([job]);
+  const reread = store.readPrintJobs();
+  assert.deepEqual(reread, [job]);
+});
+
+test('ensureDirs creates the print-outbox directory', () => {
+  store.ensureDirs();
+  assert.ok(fs.existsSync(store.PRINT_OUTBOX_DIR));
 });
 
 test('readJsonFile recovers from a corrupt file by backing it up and returning defaults', () => {

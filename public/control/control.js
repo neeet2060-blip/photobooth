@@ -1,6 +1,6 @@
 import { connectSocket, onState, onEvent, sendAction } from '../shared/socket-state.js';
 import { t, mountLangToggle } from '../shared/i18n.js';
-import { composeFrame, canvasToJpegBlob } from '../shared/compose.js';
+import { composeFrame, composePrintSheet, canvasToJpegBlob } from '../shared/compose.js';
 
 const root = document.getElementById('root');
 mountLangToggle(document.body, () => render(lastState));
@@ -10,6 +10,11 @@ let framesCache = [];
 let filtersCache = [];
 let countdownValue = null;
 let framesFetchedForTheme = false;
+// Print pricing isn't pushed over the socket state broadcast, so we fetch it
+// once from the (unauthenticated, LAN-only) admin settings endpoint — the
+// same one the admin UI reads — purely to show a total in the print-order
+// UI. If this fetch fails, the UI still works with quantity-only display.
+let printSettingsCache = null;
 
 connectSocket();
 
@@ -30,6 +35,14 @@ fetch('/api/filters')
   .then((r) => r.json())
   .then((d) => {
     filtersCache = d.filters || [];
+  })
+  .catch(() => {});
+
+fetch('/api/admin/settings')
+  .then((r) => r.json())
+  .then((d) => {
+    printSettingsCache = d.settings || null;
+    render(lastState);
   })
   .catch(() => {});
 
@@ -257,6 +270,30 @@ function renderFilter(state) {
     } catch (err) {
       confirmBtn.disabled = false;
       alert(t('errorGeneric'));
+      return;
+    }
+
+    // Print-sheet upload is a background nice-to-have for the paid printing
+    // add-on: it must never block, delay, or fail the visitor-facing
+    // final.jpg/finalSaved flow above, so any failure here is only logged.
+    try {
+      const activeFilter = filtersCache.find((f) => f.id === state.filterId) || { css: 'none' };
+      const printCanvas = document.createElement('canvas');
+      await composePrintSheet({
+        canvas: printCanvas,
+        layoutName: frame.layout,
+        photoUrls: orderedPhotoUrls,
+        frameUrl: frame.file,
+        filterCss: activeFilter.css,
+      });
+      const printBlob = await canvasToJpegBlob(printCanvas, 0.92);
+      const printFormData = new FormData();
+      printFormData.append('sessionId', state.sessionId);
+      printFormData.append('photo', printBlob, 'print.jpg');
+      const printRes = await fetch('/api/print-sheet', { method: 'POST', body: printFormData });
+      if (!printRes.ok) throw new Error('print_sheet_upload_failed');
+    } catch (err) {
+      console.error('print-sheet upload failed (non-blocking):', err);
     }
   });
 
@@ -287,11 +324,84 @@ function filterLabel(id) {
   return map[id] || id;
 }
 
+const MIN_PRINT_QUANTITY = 1;
+const FALLBACK_MAX_PRINT_QUANTITY = 10;
+
 function renderQr(state) {
-  return el('div', { class: 'screen' }, [
+  const children = [
     el('h1', {}, t('qrTitle')),
     el('p', {}, t('qrSubtitle')),
     el('div', { class: 'qr-box' }, [el('img', { src: state.qrDataUrl, alt: 'QR' })]),
+    renderPrintOrderSection(state),
+    // "처음으로" always works regardless of print-order sub-state — restart's
+    // guard in state.js only checks phase === qr, unaffected by printOrder.
     el('button', { class: 'primary big-button', onclick: () => sendAction('restart') }, t('restartButton')),
+  ];
+  return el('div', { class: 'screen' }, children);
+}
+
+function renderPrintOrderSection(state) {
+  const printOrder = state.printOrder;
+  const maxQuantity = (printSettingsCache && printSettingsCache.maxPrintQuantity) || FALLBACK_MAX_PRINT_QUANTITY;
+
+  if (!printOrder) {
+    return el('div', { class: 'print-order-box' }, [
+      el('button', { onclick: () => sendAction('openPrintOrder') }, t('qrPrintOrderButton')),
+    ]);
+  }
+
+  if (printOrder.stage === 'quantity') {
+    const quantity = printOrder.quantity;
+    return el('div', { class: 'print-order-box' }, [
+      el('div', {}, t('qrPrintQuantityLabel')),
+      el('div', { style: 'display:flex;align-items:center;gap:12px;justify-content:center;' }, [
+        el(
+          'button',
+          {
+            disabled: quantity <= MIN_PRINT_QUANTITY ? 'disabled' : null,
+            onclick: () => sendAction('setPrintQuantity', { quantity: quantity - 1 }),
+          },
+          '-',
+        ),
+        el('div', {}, t('qrPrintQuantityOf', { quantity })),
+        el(
+          'button',
+          {
+            disabled: quantity >= maxQuantity ? 'disabled' : null,
+            onclick: () => sendAction('setPrintQuantity', { quantity: quantity + 1 }),
+          },
+          '+',
+        ),
+      ]),
+      el('div', { style: 'display:flex;gap:12px;justify-content:center;' }, [
+        el('button', { onclick: () => sendAction('cancelPrintOrder') }, t('qrPrintCancelButton')),
+        el(
+          'button',
+          { class: 'primary', onclick: () => sendAction('confirmPrintQuantity') },
+          t('qrPrintConfirmQuantityButton'),
+        ),
+      ]),
+    ]);
+  }
+
+  // stage === 'awaiting_payment'
+  const totalLabel = printSettingsCache
+    ? t('qrPrintTotal', { total: `€${((printOrder.quantity * printSettingsCache.printUnitPriceCents) / 100).toFixed(2)}` })
+    : t('qrPrintQuantityOf', { quantity: printOrder.quantity });
+
+  return el('div', { class: 'print-order-box' }, [
+    el('div', {}, totalLabel),
+    el('div', {}, t('qrPrintAwaitingPayment')),
+    el('div', { style: 'display:flex;gap:12px;justify-content:center;' }, [
+      el('button', { onclick: () => sendAction('cancelPrintOrder') }, t('qrPrintCancelButton')),
+      // Staff-operated: this booth screen sits with staff at this step, same
+      // as the rest of the flow (no separate staff-vs-customer surface exists
+      // elsewhere in control.js either).
+      el(
+        'button',
+        { class: 'primary', onclick: () => sendAction('confirmPrintPayment') },
+        t('qrPrintConfirmPaymentButton'),
+      ),
+    ]),
   ]);
 }

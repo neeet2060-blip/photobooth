@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 3600" width="1200" height="3600">
+  <defs>
+    <linearGradient id="s05-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd4e2"/>
+      <stop offset="100%" stop-color="#ffe9cf"/>
+    </linearGradient>
+    <linearGradient id="s05-banner" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff6f9e"/>
+      <stop offset="100%" stop-color="#ffb35c"/>
+    </linearGradient>
+  </defs>
+
+  <path fill-rule="evenodd" fill="url(#s05-bg)"
+    d="M30,0 H1170 A30,30 0 0 1 1200,30 V3570 A30,30 0 0 1 1170,3600 H30 A30,30 0 0 1 0,3570 V30 A30,30 0 0 1 30,0 Z
+       M75,75 H1125 V855 H75 Z
+       M75,930 H1125 V1710 H75 Z
+       M75,1785 H1125 V2565 H75 Z
+       M75,2640 H1125 V3420 H75 Z"/>
+
+  <g fill="none" stroke="#ff6f9e" stroke-width="10">
+    <rect x="75" y="75" width="1050" height="780" rx="8"/>
+    <rect x="75" y="930" width="1050" height="780" rx="8"/>
+    <rect x="75" y="1785" width="1050" height="780" rx="8"/>
+    <rect x="75" y="2640" width="1050" height="780" rx="8"/>
+  </g>
+
+  <!-- FAN SIGN banner fully in the 0-75 top margin, vivid gradient -->
+  <rect x="0" y="0" width="1200" height="75" fill="url(#s05-banner)"/>
+  <text x="600" y="50" text-anchor="middle" font-family="sans-serif" font-size="38" font-weight="800" letter-spacing="8" fill="#ffffff">FAN SIGN</text>
+
+  <!-- Heart accents in the inter-slot gaps -->
+  <g fill="#ff4f7f">
+    <path d="M1095,882 c0,-14 17,-14 17,0 c0,-14 17,-14 17,0 c0,17 -17,28 -17,28 c0,0 -17,-11 -17,-28 Z"/>
+    <path d="M95,1737 c0,-14 17,-14 17,0 c0,-14 17,-14 17,0 c0,17 -17,28 -17,28 c0,0 -17,-11 -17,-28 Z"/>
+    <path d="M1095,2592 c0,-14 17,-14 17,0 c0,-14 17,-14 17,0 c0,17 -17,28 -17,28 c0,0 -17,-11 -17,-28 Z"/>
+  </g>
+
+  <!-- Bold footer band: signature area + branding -->
+  <rect x="0" y="3420" width="1200" height="180" fill="#fff3e6"/>
+  <rect x="0" y="3420" width="1200" height="8" fill="url(#s05-banner)"/>
+  <text x="600" y="3465" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="700" fill="#c9527d" letter-spacing="3">SIGNATURE</text>
+  <line x1="240" y1="3495" x2="960" y2="3495" stroke="#ff6f9e" stroke-width="3" stroke-dasharray="8,10"/>
+  <text x="600" y="3560" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif" font-size="30" font-weight="700" fill="#c9527d">Taste of Korea · 인생네컷</text>
+</svg>

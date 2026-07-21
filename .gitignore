@@ -2,5 +2,9 @@ node_modules/
 certs/
 data/photos/
 data/frames/
+# Staged/queued print copies and folder-mode output both contain visitor
+# photos — never commit them.
+data/print-jobs/
+data/print-outbox/
 data/*.json
 .DS_Store

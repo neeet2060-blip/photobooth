@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 2400" width="2400" height="2400">
+  <defs>
+    <linearGradient id="s08-gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0d17a"/>
+      <stop offset="100%" stop-color="#c9942f"/>
+    </linearGradient>
+  </defs>
+
+  <path fill-rule="evenodd" fill="#141f36"
+    d="M0,0 H2400 V2400 H0 Z
+       M75,75 H1170 V1170 H75 Z
+       M1230,75 H2325 V1170 H1230 Z
+       M75,1230 H1170 V2325 H75 Z
+       M1230,1230 H2325 V2325 H1230 Z"/>
+
+  <!-- Bold gold keylines -->
+  <g fill="none" stroke="url(#s08-gold)" stroke-width="18">
+    <rect x="75" y="75" width="1095" height="1095"/>
+    <rect x="1230" y="75" width="1095" height="1095"/>
+    <rect x="75" y="1230" width="1095" height="1095"/>
+    <rect x="1230" y="1230" width="1095" height="1095"/>
+  </g>
+  <g fill="none" stroke="#a8323a" stroke-width="4">
+    <rect x="98" y="98" width="1049" height="1049"/>
+    <rect x="1253" y="98" width="1049" height="1049"/>
+    <rect x="98" y="1253" width="1049" height="1049"/>
+    <rect x="1253" y="1253" width="1049" height="1049"/>
+  </g>
+
+  <!-- Symmetric ornamental corner patterns, confined to the outer 0-75 margin -->
+  <g fill="none" stroke="url(#s08-gold)" stroke-width="5">
+    <path d="M8,45 Q8,8 45,8"/>
+    <circle cx="45" cy="45" r="18"/>
+    <path d="M2392,45 Q2392,8 2355,8"/>
+    <circle cx="2355" cy="45" r="18"/>
+    <path d="M8,2355 Q8,2392 45,2392"/>
+    <circle cx="45" cy="2355" r="18"/>
+    <path d="M2392,2355 Q2392,2392 2355,2392"/>
+    <circle cx="2355" cy="2355" r="18"/>
+  </g>
+
+  <!-- Center ornament in the gap cross -->
+  <rect x="1145" y="1145" width="110" height="110" fill="#141f36" stroke="url(#s08-gold)" stroke-width="6"/>
+  <path d="M1200,1163 L1220,1200 L1200,1237 L1180,1200 Z" fill="#a8323a"/>
+  <circle cx="1200" cy="1200" r="12" fill="url(#s08-gold)"/>
+
+  <!-- Dancheong palette blocks along the top margin -->
+  <rect x="540" y="18" width="60" height="24" fill="#a8323a"/>
+  <rect x="1800" y="18" width="60" height="24" fill="#2a6d47"/>
+  <rect x="1170" y="18" width="60" height="24" fill="#2a5487"/>
+
+  <text x="1200" y="2372" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="700" letter-spacing="5" fill="url(#s08-gold)">TASTE OF KOREA · 단청</text>
+</svg>

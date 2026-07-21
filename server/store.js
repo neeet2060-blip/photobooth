@@ -8,10 +8,12 @@ const path = require('path');
 const DATA_DIR = process.env.PHOTOBOOTH_DATA_DIR || path.join(__dirname, '..', 'data');
 const PHOTOS_DIR = path.join(DATA_DIR, 'photos');
 const FRAMES_DIR = path.join(DATA_DIR, 'frames');
+const PRINT_OUTBOX_DIR = path.join(DATA_DIR, 'print-outbox');
 
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const FRAMES_FILE = path.join(DATA_DIR, 'frames.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
+const PRINTJOBS_FILE = path.join(DATA_DIR, 'printjobs.json');
 
 const DEFAULT_SETTINGS = {
   shotsTotal: 8,
@@ -20,6 +22,11 @@ const DEFAULT_SETTINGS = {
   qrTimeoutSec: 90,
   defaultLang: 'ko',
   autoDeleteHours: 24,
+  printUnitPriceCents: 300,
+  maxPrintQuantity: 10,
+  printMode: 'folder',
+  printerName: '',
+  printMedia: '4x6',
 };
 
 const DEFAULT_STATS = {
@@ -32,7 +39,7 @@ const DEFAULT_STATS = {
 };
 
 function ensureDirs() {
-  for (const dir of [DATA_DIR, PHOTOS_DIR, FRAMES_DIR]) {
+  for (const dir of [DATA_DIR, PHOTOS_DIR, FRAMES_DIR, PRINT_OUTBOX_DIR]) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -161,10 +168,21 @@ function recordSessionCompleted({ frameId, filterId }) {
   return writeStats(next);
 }
 
+function readPrintJobs() {
+  return readJsonFile(PRINTJOBS_FILE, []);
+}
+
+function writePrintJobs(jobs) {
+  writeJsonFile(PRINTJOBS_FILE, jobs);
+  return jobs;
+}
+
 module.exports = {
   DATA_DIR,
   PHOTOS_DIR,
   FRAMES_DIR,
+  PRINT_OUTBOX_DIR,
+  PRINTJOBS_FILE,
   DEFAULT_SETTINGS,
   DEFAULT_STATS,
   ensureDirs,
@@ -179,4 +197,6 @@ module.exports = {
   recordSessionStarted,
   recordSessionCompleted,
   defaultFrames,
+  readPrintJobs,
+  writePrintJobs,
 };
