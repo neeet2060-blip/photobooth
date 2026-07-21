@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>디스플레이 - 인생네컷 포토부스</title>
+  <link rel="stylesheet" href="/shared/app.css" />
+  <style>
+    .display-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+    .big-title { font-size: 4rem; font-weight: 900; }
+    .big-sub { font-size: 1.6rem; color: var(--text-dim); }
+    .display-thumb-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1200px; }
+    .display-thumb-grid img { width: 100%; border-radius: 12px; aspect-ratio: 4/3; object-fit: cover; }
+    .display-countdown { font-size: 16rem; font-weight: 900; color: var(--accent); }
+    .display-qr img { width: 480px; height: 480px; }
+  </style>
+</head>
+<body>
+  <div id="root" class="display-screen"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/display/display.js"></script>
+</body>
+</html>

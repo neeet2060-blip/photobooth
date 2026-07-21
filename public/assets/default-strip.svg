@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 3600" width="1200" height="3600">
+  <defs>
+    <linearGradient id="stripBorder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff6f91"/>
+      <stop offset="50%" stop-color="#ffc75f"/>
+      <stop offset="100%" stop-color="#6ee7d0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Border/margin area with 4 transparent photo windows cut out via evenodd -->
+  <path fill-rule="evenodd" fill="url(#stripBorder)"
+    d="M40,0 H1160 A40,40 0 0 1 1200,40 V3560 A40,40 0 0 1 1160,3600 H40 A40,40 0 0 1 0,3560 V40 A40,40 0 0 1 40,0 Z
+       M75,75 H1125 V855 H75 Z
+       M75,930 H1125 V1710 H75 Z
+       M75,1785 H1125 V2565 H75 Z
+       M75,2640 H1125 V3420 H75 Z" />
+
+  <!-- Inner white keylines around each photo window -->
+  <rect x="75" y="75" width="1050" height="780" fill="none" stroke="#ffffff" stroke-width="6" rx="10"/>
+  <rect x="75" y="930" width="1050" height="780" fill="none" stroke="#ffffff" stroke-width="6" rx="10"/>
+  <rect x="75" y="1785" width="1050" height="780" fill="none" stroke="#ffffff" stroke-width="6" rx="10"/>
+  <rect x="75" y="2640" width="1050" height="780" fill="none" stroke="#ffffff" stroke-width="6" rx="10"/>
+
+  <text x="600" y="3510" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif"
+    font-size="72" font-weight="800" fill="#2a2a34">Taste of Korea</text>
+  <text x="600" y="3560" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif"
+    font-size="34" fill="#2a2a34">인생네컷</text>
+</svg>

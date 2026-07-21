@@ -1,0 +1,260 @@
+:root {
+  --bg: #121216;
+  --surface: #1e1e26;
+  --surface-2: #2a2a34;
+  --text: #f2f2f5;
+  --text-dim: #a8a8b3;
+  --accent: #ffd54a;
+  --accent-2: #6ee7d0;
+  --danger: #ff6b6b;
+  --radius: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+}
+
+h1, h2, h3 {
+  margin: 0 0 12px;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+  padding: 14px 24px;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+button:active {
+  transform: scale(0.96);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #14140f;
+  font-weight: 700;
+}
+
+button.danger {
+  background: var(--danger);
+  color: #240000;
+}
+
+.screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  gap: 20px;
+}
+
+.big-button {
+  font-size: 2rem;
+  padding: 32px 64px;
+  border-radius: 32px;
+}
+
+.lang-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  background: var(--surface-2);
+  opacity: 0.85;
+}
+
+.thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.thumb {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  aspect-ratio: 4 / 3;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb.picked {
+  outline: 4px solid var(--accent);
+}
+
+.thumb .pick-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: var(--accent);
+  color: #14140f;
+  font-weight: 800;
+  font-size: 1.1rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.frame-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.frame-card img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.filter-chips {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.filter-chip {
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.filter-chip.active {
+  background: var(--accent);
+  color: #14140f;
+  font-weight: 700;
+}
+
+.countdown-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12rem;
+  font-weight: 900;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 500;
+  pointer-events: none;
+}
+
+.qr-box {
+  background: #fff;
+  padding: 24px;
+  border-radius: 20px;
+}
+
+.qr-box img {
+  display: block;
+  width: 320px;
+  height: 320px;
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+table.data-table th, table.data-table td {
+  border: 1px solid var(--surface-2);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tabs button.active {
+  background: var(--accent);
+  color: #14140f;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.form-row label {
+  min-width: 160px;
+  text-align: left;
+}
+
+input[type="text"], input[type="number"], select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-2);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #121216;
+    --surface: #1e1e26;
+    --text: #f2f2f5;
+  }
+}

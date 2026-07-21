@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>리모컨 - 인생네컷 포토부스</title>
+  <link rel="stylesheet" href="/shared/app.css" />
+  <style>
+    #shutter { width: 80vmin; height: 80vmin; border-radius: 50%; font-size: 2.4rem; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <div id="root" class="screen">
+    <h1 id="title"></h1>
+    <div id="info" class="progress-text"></div>
+    <button id="shutter" class="primary" disabled></button>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/remote/remote.js"></script>
+</body>
+</html>

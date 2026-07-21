@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 2400" width="2400" height="2400">
+  <defs>
+    <linearGradient id="gridBorder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6ee7d0"/>
+      <stop offset="50%" stop-color="#ffc75f"/>
+      <stop offset="100%" stop-color="#ff6f91"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Border/margin area with 4 transparent photo windows cut out via evenodd -->
+  <path fill-rule="evenodd" fill="url(#gridBorder)"
+    d="M60,0 H2340 A60,60 0 0 1 2400,60 V2340 A60,60 0 0 1 2340,2400 H60 A60,60 0 0 1 0,2340 V60 A60,60 0 0 1 60,0 Z
+       M75,75 H1170 V1170 H75 Z
+       M1230,75 H2325 V1170 H1230 Z
+       M75,1230 H1170 V2325 H75 Z
+       M1230,1230 H2325 V2325 H1230 Z" />
+
+  <!-- Inner white keylines around each photo window -->
+  <rect x="75" y="75" width="1095" height="1095" fill="none" stroke="#ffffff" stroke-width="8" rx="14"/>
+  <rect x="1230" y="75" width="1095" height="1095" fill="none" stroke="#ffffff" stroke-width="8" rx="14"/>
+  <rect x="75" y="1230" width="1095" height="1095" fill="none" stroke="#ffffff" stroke-width="8" rx="14"/>
+  <rect x="1230" y="1230" width="1095" height="1095" fill="none" stroke="#ffffff" stroke-width="8" rx="14"/>
+
+  <!-- Center cross gap gets a small badge -->
+  <circle cx="1200" cy="1200" r="70" fill="#ffffff"/>
+  <text x="1200" y="1188" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif"
+    font-size="30" font-weight="800" fill="#2a2a34">Taste</text>
+  <text x="1200" y="1224" text-anchor="middle" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif"
+    font-size="26" fill="#2a2a34">of Korea</text>
+</svg>

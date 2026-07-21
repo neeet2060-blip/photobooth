@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>관리자 - 인생네컷 포토부스</title>
+  <link rel="stylesheet" href="/shared/app.css" />
+  <style>
+    .admin-wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 80px; text-align: left; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .frame-row { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+    .frame-row img { width: 60px; height: 60px; object-fit: contain; background: #fff; border-radius: 6px; }
+    .frame-row .name { flex: 1; font-weight: 600; }
+    .upload-box { background: var(--surface); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+    .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border-radius: 12px; padding: 16px; text-align: center; }
+    .stat-card .value { font-size: 2rem; font-weight: 800; color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="admin-wrap">
+    <h1>관리자</h1>
+    <div class="tabs">
+      <button data-tab="frames" class="active"></button>
+      <button data-tab="settings"></button>
+      <button data-tab="stats"></button>
+    </div>
+
+    <section class="panel active" id="panel-frames">
+      <div class="upload-box">
+        <div class="form-row">
+          <label>이름</label>
+          <input type="text" id="frame-name" placeholder="프레임 이름" />
+        </div>
+        <div class="form-row">
+          <label>레이아웃</label>
+          <select id="frame-layout">
+            <option value="strip">strip (4컷 세로)</option>
+            <option value="grid">grid (2x2)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>파일 (PNG/SVG)</label>
+          <input type="file" id="frame-file" accept="image/svg+xml,image/png" />
+        </div>
+        <button class="primary" id="frame-upload-btn"></button>
+      </div>
+      <div id="frame-list"></div>
+    </section>
+
+    <section class="panel" id="panel-settings">
+      <div id="settings-form"></div>
+      <button class="primary" id="settings-save-btn"></button>
+    </section>
+
+    <section class="panel" id="panel-stats">
+      <div class="stat-cards" id="stat-cards"></div>
+      <h3>프레임별 사용 횟수</h3>
+      <table class="data-table" id="frame-usage-table"></table>
+      <h3>필터별 사용 횟수</h3>
+      <table class="data-table" id="filter-usage-table"></table>
+    </section>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/admin/admin.js"></script>
+</body>
+</html>
