@@ -159,7 +159,7 @@ async function runJob(jobId) {
     const job = getJobById(jobId);
     try {
       // eslint-disable-next-line no-await-in-loop
-      await printer.printFile(job.file, {
+      const result = await printer.printFile(job.file, {
         copies: job.quantity,
         printerName: settings.printerName,
         media: settings.printMedia,
@@ -167,7 +167,10 @@ async function runJob(jobId) {
         jobId: job.id,
         extraOptions: {},
       });
-      updateJob(jobId, { status: 'done' });
+      // Record which transport actually handled it, so the admin UI can say
+      // "파일 저장됨" vs "프린터로 전송됨" instead of a bare "완료" — the mode
+      // can change in settings later, so it must be stored per job.
+      updateJob(jobId, { status: 'done', mode: (result && result.mode) || null });
       return;
     } catch (err) {
       const attempts = attempt + 1;

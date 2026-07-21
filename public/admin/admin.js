@@ -370,7 +370,7 @@ function renderPrintQueue(jobs) {
     const info = document.createElement('div');
     info.className = 'name';
     const amount = (job.totalCents / 100).toFixed(2);
-    info.textContent = `[${job.status}] ${job.quantity}장 · €${amount} · ${new Date(job.createdAt).toLocaleString('ko-KR')}`;
+    info.textContent = `[${printStatusLabel(job)}] ${job.quantity}장 · €${amount} · ${new Date(job.createdAt).toLocaleString('ko-KR')}`;
     row.appendChild(info);
 
     if (job.status === 'failed') {
@@ -466,9 +466,33 @@ function renderOrdersTable(orders) {
   }
   for (const order of orders) {
     const row = document.createElement('tr');
-    row.innerHTML = `<td>${order.id}</td><td>${new Date(order.createdAt).toLocaleString('ko-KR')}</td><td>${order.sessionId}</td><td>${order.quantity}</td><td>€${(order.totalCents / 100).toFixed(2)}</td><td>${order.status}</td>`;
+    row.innerHTML = `<td>${order.id}</td><td>${new Date(order.createdAt).toLocaleString('ko-KR')}</td><td>${order.sessionId}</td><td>${order.quantity}</td><td>€${(order.totalCents / 100).toFixed(2)}</td><td>${printStatusLabel(order)}</td>`;
     table.appendChild(row);
   }
+}
+
+const PRINT_STATUS_LABELS = {
+  queued: '대기중',
+  printing: '인쇄중',
+  failed: '실패',
+  canceled: '취소됨',
+};
+
+/**
+ * Human label for a print job's status.
+ *
+ * 'done' is deliberately never shown as "완료/출력됨": in folder mode nothing
+ * was printed at all, and in cups mode the file was only handed to the print
+ * system — neither is proof that paper actually came out. Staff must check the
+ * physical printer, especially since the visitor has already paid.
+ */
+function printStatusLabel(job) {
+  if (job.status !== 'done') {
+    return PRINT_STATUS_LABELS[job.status] || job.status;
+  }
+  if (job.mode === 'cups') return '프린터로 전송됨';
+  if (job.mode === 'folder') return '파일 저장됨';
+  return '처리됨';
 }
 
 loadFrames();
