@@ -427,22 +427,72 @@ function renderDownloadPage({ imageSrc, autoDeleteHours }) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>내 사진 다운로드 - 인생네컷</title>
+  <title>내 사진 - 인생네컷</title>
   <link rel="stylesheet" href="/shared/app.css" />
   <style>
     .download-page { max-width: 480px; margin: 0 auto; padding: 24px 16px; text-align: center; }
-    .download-page img { width: 100%; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); margin-bottom: 24px; }
-    .download-btn { display: inline-block; padding: 18px 36px; font-size: 1.3rem; font-weight: bold; background: var(--accent); color: #111; border-radius: 999px; text-decoration: none; }
-    .privacy-note { margin-top: 20px; font-size: 0.9rem; opacity: 0.7; }
+    .download-page img { width: 100%; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); margin-bottom: 20px; -webkit-touch-callout: default; }
+    .save-btn { display: inline-block; width: 100%; box-sizing: border-box; padding: 18px 24px; font-size: 1.25rem; font-weight: bold; background: var(--accent); color: #111; border: none; border-radius: 999px; text-decoration: none; cursor: pointer; }
+    .hint { margin-top: 16px; font-size: 0.95rem; line-height: 1.5; opacity: 0.85; }
+    .hint .en { display: block; font-size: 0.85rem; opacity: 0.7; margin-top: 4px; }
+    .privacy-note { margin-top: 22px; font-size: 0.8rem; opacity: 0.6; line-height: 1.4; }
+    .toast { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #fff; padding: 12px 20px; border-radius: 999px; font-size: 0.9rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .toast.show { opacity: 1; }
   </style>
 </head>
 <body>
   <div class="download-page">
-    <h1>내 사진</h1>
-    <img src="${escapeHtml(imageSrc)}" alt="최종 사진" />
-    <a class="download-btn" href="${escapeHtml(imageSrc)}" download="my-photobooth.jpg">다운로드</a>
-    <p class="privacy-note">이 사진은 ${Number(autoDeleteHours)}시간 후 자동 삭제됩니다.</p>
+    <h1>내 사진 📸</h1>
+    <img id="photo" src="${escapeHtml(imageSrc)}" alt="최종 사진" />
+    <button id="save-btn" class="save-btn">사진 저장 / Save</button>
+    <p class="hint" id="hint">
+      아이폰: 사진을 <b>길게 눌러</b> "사진에 추가"
+      <span class="en">iPhone: press &amp; hold the photo → "Add to Photos"</span>
+    </p>
+    <p class="privacy-note">이 사진은 ${Number(autoDeleteHours)}시간 후 자동 삭제됩니다.<br/>This photo is auto-deleted after ${Number(autoDeleteHours)} hours.</p>
   </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    (function () {
+      var imageSrc = ${JSON.stringify(imageSrc)};
+      var btn = document.getElementById('save-btn');
+      var toastEl = document.getElementById('toast');
+      function toast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        setTimeout(function () { toastEl.classList.remove('show'); }, 2500);
+      }
+      async function fetchFile() {
+        var res = await fetch(imageSrc);
+        var blob = await res.blob();
+        return new File([blob], 'taste-of-korea.jpg', { type: 'image/jpeg' });
+      }
+      btn.addEventListener('click', async function () {
+        // Preferred path: native share sheet (iOS → "이미지 저장" into Photos).
+        try {
+          var file = await fetchFile();
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file] });
+            return;
+          }
+        } catch (err) {
+          if (err && err.name === 'AbortError') return; // user closed the sheet
+        }
+        // Fallback: trigger a download (works on Android / desktop).
+        try {
+          var a = document.createElement('a');
+          a.href = imageSrc;
+          a.download = 'taste-of-korea.jpg';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          toast('저장을 시작했어요 / Saving…');
+        } catch (e) {
+          toast('사진을 길게 눌러 저장하세요 / Long-press the photo');
+        }
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }
