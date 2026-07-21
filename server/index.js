@@ -108,7 +108,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-registerRoutes(app, { getState, dispatch, port: HTTPS_PORT });
+registerRoutes(app, { getState, dispatch, port: HTTPS_PORT, httpPort: HTTP_PORT });
 
 app.use('/photos', express.static(store.PHOTOS_DIR));
 app.use('/frames', express.static(store.FRAMES_DIR));

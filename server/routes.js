@@ -41,7 +41,7 @@ function fileFilterFactory(allowedMimes) {
  * }} deps
  */
 function registerRoutes(app, deps) {
-  const { getState, dispatch, port } = deps;
+  const { getState, dispatch, port, httpPort } = deps;
 
   // In-memory token -> sessionId map, persisted to disk so links survive restarts.
   const tokensFile = path.join(store.DATA_DIR, 'tokens.json');
@@ -154,7 +154,11 @@ function registerRoutes(app, deps) {
     saveTokens();
 
     const lanIp = getLanIp();
-    const finalUrl = `https://${lanIp}:${port}/p/${token}`;
+    // Visitors reach the download page over plain HTTP: it needs no secure
+    // context (no camera/getUserMedia), and HTTPS here would use the LAN
+    // self-signed cert, triggering a scary "not private" warning on their
+    // phones. When cloud delivery is added later this becomes the cloud URL.
+    const finalUrl = `http://${lanIp}:${httpPort}/p/${token}`;
 
     QRCode.toDataURL(finalUrl, { margin: 1, width: 480 })
       .then((qrDataUrl) => {
