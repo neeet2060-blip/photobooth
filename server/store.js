@@ -14,7 +14,7 @@ const FRAMES_FILE = path.join(DATA_DIR, 'frames.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 
 const DEFAULT_SETTINGS = {
-  shotsTotal: 12,
+  shotsTotal: 8,
   countdownSeconds: 3,
   idleTimeoutSec: 180,
   qrTimeoutSec: 90,
