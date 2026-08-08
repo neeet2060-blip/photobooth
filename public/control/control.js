@@ -328,11 +328,16 @@ const MIN_PRINT_QUANTITY = 1;
 const FALLBACK_MAX_PRINT_QUANTITY = 10;
 
 function renderQr(state) {
+  // No physical printer at this event → hide the paid print-order flow
+  // entirely rather than letting a visitor pay for a print nobody can
+  // deliver. Controlled by admin settings (default on) so a future event
+  // with a printer can turn it back on without a code change.
+  const printingEnabled = !printSettingsCache || printSettingsCache.printingEnabled !== false;
   const children = [
     el('h1', {}, t('qrTitle')),
     el('p', {}, t('qrSubtitle')),
     el('div', { class: 'qr-box' }, [el('img', { src: state.qrDataUrl, alt: 'QR' })]),
-    renderPrintOrderSection(state),
+    printingEnabled ? renderPrintOrderSection(state) : null,
     // "처음으로" always works regardless of print-order sub-state — restart's
     // guard in state.js only checks phase === qr, unaffected by printOrder.
     el('button', { class: 'primary big-button', onclick: () => sendAction('restart') }, t('restartButton')),

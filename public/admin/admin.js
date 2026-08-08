@@ -12,6 +12,7 @@ const panels = {
   printSettings: document.getElementById('panel-printSettings'),
   printQueue: document.getElementById('panel-printQueue'),
   printSettlement: document.getElementById('panel-printSettlement'),
+  cloud: document.getElementById('panel-cloud'),
 };
 
 tabs.forEach((btn) => {
@@ -25,6 +26,7 @@ tabs.forEach((btn) => {
     if (btn.dataset.tab === 'printSettings') loadPrintSettings();
     if (btn.dataset.tab === 'printQueue') loadPrintQueue();
     if (btn.dataset.tab === 'printSettlement') loadPrintSettlement();
+    if (btn.dataset.tab === 'cloud') loadCloudStatus();
   });
 });
 
@@ -37,6 +39,7 @@ function applyStaticLabels() {
       printSettings: 'adminPrintSettings',
       printQueue: 'adminPrintQueue',
       printSettlement: 'adminPrintSettlement',
+      cloud: 'adminCloud',
     }[btn.dataset.tab];
     btn.textContent = t(labelKey);
   });
@@ -142,6 +145,7 @@ const SETTINGS_FIELDS = [
   { key: 'idleTimeoutSec', label: '유휴 타임아웃(초)', type: 'number' },
   { key: 'qrTimeoutSec', label: 'QR 화면 타임아웃(초)', type: 'number' },
   { key: 'autoDeleteHours', label: '자동 삭제(시간)', type: 'number' },
+  { key: 'cloudUploadTimeoutMs', label: '클라우드 업로드 제한시간(ms)', type: 'number' },
   { key: 'defaultLang', label: '기본 언어', type: 'select', options: ['ko', 'en'] },
 ];
 
@@ -253,6 +257,7 @@ function renderUsageTable(elementId, usageMap) {
 // ---- Print settings panel ----
 
 const PRINT_SETTINGS_FIELDS = [
+  { key: 'printingEnabled', label: '인화 기능 사용 (끄면 방문객 화면에서 인화 버튼이 사라짐)', type: 'checkbox' },
   { key: 'printUnitPriceCents', label: '인화 단가 (EUR)', type: 'price' },
   { key: 'maxPrintQuantity', label: '최대 인화 매수', type: 'number' },
   { key: 'printMode', label: '인쇄 모드', type: 'select', options: ['folder', 'cups'] },
@@ -278,7 +283,11 @@ function renderPrintSettingsForm(settings) {
     row.appendChild(label);
 
     let input;
-    if (field.type === 'select') {
+    if (field.type === 'checkbox') {
+      input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = settings[field.key] !== false;
+    } else if (field.type === 'select') {
       input = document.createElement('select');
       for (const opt of field.options) {
         const optEl = document.createElement('option');
@@ -315,7 +324,9 @@ document.getElementById('print-settings-save-btn').addEventListener('click', asy
   const inputs = document.querySelectorAll('#print-settings-form [data-key]');
   const payload = {};
   inputs.forEach((input) => {
-    if (input.dataset.type === 'price') {
+    if (input.dataset.type === 'checkbox') {
+      payload[input.dataset.key] = input.checked;
+    } else if (input.dataset.type === 'price') {
       payload[input.dataset.key] = Math.round(Number(input.value) * 100);
     } else {
       payload[input.dataset.key] = input.value;
@@ -493,6 +504,32 @@ function printStatusLabel(job) {
   if (job.mode === 'cups') return '프린터로 전송됨';
   if (job.mode === 'folder') return '파일 저장됨';
   return '처리됨';
+}
+
+// ---- Cloud delivery status panel (read-only) ----
+
+async function loadCloudStatus() {
+  const res = await fetch('/api/admin/cloud');
+  const data = await res.json();
+  renderCloudStatus(data);
+}
+
+function renderCloudStatus(data) {
+  const cards = document.getElementById('cloud-status-cards');
+  cards.innerHTML = '';
+  const entries = [
+    [t('adminCloud'), data.enabled ? t('adminCloudStatusEnabled') : t('adminCloudStatusDisabled')],
+    [t('adminCloudBucket'), data.bucket || t('adminCloudBucketNone')],
+    [t('adminCloudUploadTimeout'), data.uploadTimeoutMs != null ? data.uploadTimeoutMs : '-'],
+    [t('adminCloudDelivered'), data.cloudDeliveredCount || 0],
+    [t('adminCloudLanFallback'), data.lanFallbackCount || 0],
+  ];
+  for (const [label, value] of entries) {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    card.innerHTML = `<div class="value">${value}</div><div>${label}</div>`;
+    cards.appendChild(card);
+  }
 }
 
 loadFrames();

@@ -11,8 +11,58 @@ const { PHASES, FILTERS } = require('./state');
 const { getLanIp } = require('./ip');
 const printqueue = require('./printqueue');
 const { PRINTER_NAME_REGEX, PRINT_MEDIA_REGEX } = require('./printer');
+const cloud = require('./cloud');
 
 const TOKEN_REGEX = /^[a-f0-9]{24}$/;
+
+// Token map lives at module scope (not inside registerRoutes) so that both
+// the HTTP routes below and sweepExpiredTokens (called from server/index.js
+// on the retention-sweep cadence) read/write the exact same in-memory
+// object and the same on-disk file — otherwise the two would drift out of
+// sync (routes.js could keep serving a token the sweep already deleted from
+// disk, or vice versa).
+const TOKENS_FILE = path.join(store.DATA_DIR, 'tokens.json');
+let tokens = store.readJsonFile(TOKENS_FILE, {});
+
+function saveTokens() {
+  store.writeJsonFile(TOKENS_FILE, tokens);
+}
+
+/**
+ * Races cloud.uploadFinalImage against a hard timeout so a slow/unreachable
+ * cloud backend never blocks the visitor's QR screen — this app is
+ * fundamentally LAN-only; cloud delivery is a best-effort layer on top.
+ *
+ * On timeout (or any upload failure), returns null so the caller falls back
+ * to exactly today's LAN-URL behavior. The losing upload promise is given a
+ * no-op .catch() so that if it resolves/rejects later (after we've already
+ * moved on), it never surfaces as an unhandled rejection.
+ *
+ * @returns {Promise<string|null>}
+ */
+function raceCloudUpload(finalPath, token, timeoutMs) {
+  const uploadPromise = cloud.uploadFinalImage(finalPath, token);
+  let timer;
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+
+  return Promise.race([uploadPromise, timeoutPromise])
+    .then((result) => {
+      clearTimeout(timer);
+      uploadPromise.catch(() => {});
+      if (result === null) {
+        console.warn(`[cloud] upload timed out after ${timeoutMs}ms for token ${token.slice(0, 8)}…, using LAN URL`);
+      }
+      return result;
+    })
+    .catch((err) => {
+      clearTimeout(timer);
+      uploadPromise.catch(() => {});
+      console.warn(`[cloud] upload failed for token ${token.slice(0, 8)}…, using LAN URL: ${err.message}`);
+      return null;
+    });
+}
 const FRAME_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const ALLOWED_PHOTO_MIME = new Set(['image/jpeg', 'image/png']);
@@ -44,14 +94,6 @@ function fileFilterFactory(allowedMimes) {
  */
 function registerRoutes(app, deps) {
   const { getState, dispatch, port, httpPort } = deps;
-
-  // In-memory token -> sessionId map, persisted to disk so links survive restarts.
-  const tokensFile = path.join(store.DATA_DIR, 'tokens.json');
-  let tokens = store.readJsonFile(tokensFile, {});
-
-  function saveTokens() {
-    store.writeJsonFile(tokensFile, tokens);
-  }
 
   const photoUpload = multer({
     storage: multer.diskStorage({
@@ -155,7 +197,7 @@ function registerRoutes(app, deps) {
 
   // ---- Final composited image upload ----
 
-  app.post('/api/final', finalUpload.single('photo'), (req, res) => {
+  app.post('/api/final', finalUpload.single('photo'), async (req, res) => {
     const state = getState();
     const sessionId = req.body.sessionId;
 
@@ -170,24 +212,45 @@ function registerRoutes(app, deps) {
     }
 
     const token = crypto.randomBytes(12).toString('hex');
-    tokens[token] = { sessionId, createdAt: Date.now() };
-    saveTokens();
+    const createdAt = Date.now();
 
     const lanIp = getLanIp();
     // Visitors reach the download page over plain HTTP: it needs no secure
     // context (no camera/getUserMedia), and HTTPS here would use the LAN
     // self-signed cert, triggering a scary "not private" warning on their
-    // phones. When cloud delivery is added later this becomes the cloud URL.
-    const finalUrl = `http://${lanIp}:${httpPort}/p/${token}`;
+    // phones. This is always the fallback URL — used as-is when cloud
+    // delivery is disabled/unreachable/slow, see the cloud-upload attempt
+    // below.
+    const lanUrl = `http://${lanIp}:${httpPort}/p/${token}`;
 
-    QRCode.toDataURL(finalUrl, { margin: 1, width: 480 })
-      .then((qrDataUrl) => {
-        dispatch({ type: 'finalSaved', payload: { finalUrl, finalToken: token, qrDataUrl } });
-        res.json({ ok: true, finalUrl, token });
-      })
-      .catch((err) => {
-        res.status(500).json({ ok: false, error: 'qr_generation_failed', message: err.message });
-      });
+    let finalUrl = lanUrl;
+    let tokenRecord = { sessionId, createdAt };
+
+    if (cloud.isCloudEnabled()) {
+      const settings = store.readSettings();
+      const timeoutMs = Number.isFinite(settings.cloudUploadTimeoutMs) && settings.cloudUploadTimeoutMs > 0
+        ? settings.cloudUploadTimeoutMs
+        : store.DEFAULT_SETTINGS.cloudUploadTimeoutMs;
+      const cloudUrl = await raceCloudUpload(req.file.path, token, timeoutMs);
+      if (cloudUrl) {
+        finalUrl = cloudUrl;
+        tokenRecord = { sessionId, createdAt, cloudUrl, uploadedAt: Date.now() };
+      }
+      // On timeout/failure, cloudUrl is null and we silently keep the LAN
+      // fallback already assigned above — raceCloudUpload already logged
+      // the reason via console.warn.
+    }
+
+    tokens[token] = tokenRecord;
+    saveTokens();
+
+    try {
+      const qrDataUrl = await QRCode.toDataURL(finalUrl, { margin: 1, width: 480 });
+      dispatch({ type: 'finalSaved', payload: { finalUrl, finalToken: token, qrDataUrl } });
+      return res.json({ ok: true, finalUrl, token });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: 'qr_generation_failed', message: err.message });
+    }
   });
 
   // ---- Print-ready sheet upload (paid printing add-on; QR download above is
@@ -327,7 +390,9 @@ function registerRoutes(app, deps) {
     const current = store.readSettings();
     const next = { ...current };
 
-    const numericFields = ['shotsTotal', 'countdownSeconds', 'idleTimeoutSec', 'qrTimeoutSec', 'autoDeleteHours'];
+    const numericFields = [
+      'shotsTotal', 'countdownSeconds', 'idleTimeoutSec', 'qrTimeoutSec', 'autoDeleteHours', 'cloudUploadTimeoutMs',
+    ];
     for (const field of numericFields) {
       if (body[field] !== undefined) {
         const num = Number(body[field]);
@@ -337,6 +402,16 @@ function registerRoutes(app, deps) {
         next[field] = Math.round(num);
       }
     }
+    // cloudUploadTimeoutMs additionally has an upper bound (unlike the other
+    // numericFields above): it gates how long a visitor's QR screen can be
+    // blocked waiting on the cloud upload, so an accidental huge value here
+    // must not be allowed to silently make every session feel frozen.
+    // Follows the same "separate if block, own error code" shape as
+    // printUnitPriceCents/maxPrintQuantity below rather than special-casing
+    // the generic loop above.
+    if (body.cloudUploadTimeoutMs !== undefined && next.cloudUploadTimeoutMs > 60000) {
+      return res.status(400).json({ ok: false, error: 'invalid_cloudUploadTimeoutMs_range' });
+    }
     if (body.defaultLang !== undefined) {
       if (body.defaultLang !== 'ko' && body.defaultLang !== 'en') {
         return res.status(400).json({ ok: false, error: 'invalid_defaultLang' });
@@ -344,6 +419,12 @@ function registerRoutes(app, deps) {
       next.defaultLang = body.defaultLang;
     }
 
+    if (body.printingEnabled !== undefined) {
+      if (typeof body.printingEnabled !== 'boolean') {
+        return res.status(400).json({ ok: false, error: 'invalid_printingEnabled' });
+      }
+      next.printingEnabled = body.printingEnabled;
+    }
     if (body.printUnitPriceCents !== undefined) {
       const num = Number(body.printUnitPriceCents);
       if (!Number.isInteger(num) || num <= 0 || num > 100000) {
@@ -379,6 +460,34 @@ function registerRoutes(app, deps) {
 
     const written = store.writeSettings(next);
     res.json({ ok: true, settings: written });
+  });
+
+  // ---- Admin: cloud delivery status (read-only) ----
+  //
+  // Never include credential paths, key contents, or any other secret value
+  // here — this is purely operational visibility (is it on, what bucket,
+  // how many photos went out each way).
+  app.get('/api/admin/cloud', (req, res) => {
+    const settings = store.readSettings();
+    const enabled = cloud.isCloudEnabled();
+    const tokensSnapshot = store.readJsonFile(TOKENS_FILE, {});
+    let cloudDeliveredCount = 0;
+    let lanFallbackCount = 0;
+    for (const entry of Object.values(tokensSnapshot)) {
+      if (entry && entry.cloudUrl) {
+        cloudDeliveredCount += 1;
+      } else {
+        lanFallbackCount += 1;
+      }
+    }
+    res.json({
+      ok: true,
+      enabled,
+      bucket: enabled ? cloud.BUCKET_NAME : null,
+      uploadTimeoutMs: settings.cloudUploadTimeoutMs,
+      cloudDeliveredCount,
+      lanFallbackCount,
+    });
   });
 
   // ---- Admin: stats ----
@@ -674,4 +783,53 @@ function renderNotFoundPage() {
 </html>`;
 }
 
-module.exports = { registerRoutes };
+/**
+ * Retention sweep for token records that have a cloud copy. Called by
+ * server/index.js on the same AUTO_DELETE_SWEEP_INTERVAL_MS cadence as
+ * sweepOldPhotos/sweepOldPrintFiles.
+ *
+ * Tokens are otherwise routes.js's own domain (the module-scope `tokens`
+ * object above + tokens.json), so rather than exposing that live object
+ * across module boundaries, index.js just calls this one exported function
+ * and lets routes.js keep full control of reading/writing its own file —
+ * this mirrors how printqueue.js owns printjobs.json end-to-end and only
+ * exposes narrow functions (enqueueJob, retryJob, ...) to the rest of the app.
+ *
+ * Only entries with a `cloudUrl` are considered (LAN-only tokens have no
+ * cloud object to delete, so they're left as-is here). A cloud-delete
+ * failure (network blip, transient API error) leaves that entry untouched
+ * so it's retried on the next sweep 10 minutes later, and never throws out
+ * of this function (a stuck sweep must never crash the interval in index.js).
+ *
+ * @param {{ autoDeleteHours: number }} settings
+ */
+async function sweepExpiredTokens(settings) {
+  const maxAgeMs = settings.autoDeleteHours * 60 * 60 * 1000;
+  const now = Date.now();
+  let changed = false;
+
+  for (const [token, entry] of Object.entries(tokens)) {
+    if (!entry || !entry.cloudUrl) continue;
+    if (now - entry.createdAt <= maxAgeMs) continue;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await cloud.deleteCloudObject(token);
+      delete tokens[token];
+      changed = true;
+    } catch (err) {
+      console.warn(`[cloud] failed to delete expired cloud object for token ${token.slice(0, 8)}…, will retry next sweep: ${err.message}`);
+    }
+  }
+
+  if (changed) {
+    saveTokens();
+  }
+}
+
+module.exports = {
+  registerRoutes,
+  sweepExpiredTokens,
+  // Test-only seam: lets test/cloud.test.js exercise the timeout/fallback
+  // race in isolation, without spinning up a full HTTP + multer round trip.
+  _raceCloudUpload: raceCloudUpload,
+};

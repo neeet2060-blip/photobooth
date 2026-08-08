@@ -22,11 +22,19 @@ const DEFAULT_SETTINGS = {
   qrTimeoutSec: 90,
   defaultLang: 'ko',
   autoDeleteHours: 24,
+  // Lets an event without a physical printer hide the paid print-order flow
+  // entirely (see public/control/control.js renderQr) instead of accepting
+  // payment for prints nobody can pick up. Defaults to on for future events;
+  // this event's actual data/settings.json turns it off.
+  printingEnabled: true,
   printUnitPriceCents: 300,
   maxPrintQuantity: 10,
   printMode: 'folder',
   printerName: '',
   printMedia: '4x6',
+  // How long /api/final waits for the cloud upload before falling back to
+  // the LAN-only URL (see server/cloud.js + CLOUD.md).
+  cloudUploadTimeoutMs: 8000,
 };
 
 const DEFAULT_STATS = {
