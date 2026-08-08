@@ -140,6 +140,86 @@
   @media (max-width: 700px) {
     :root { --stage-h: 320px; }
   }
+
+  .card {
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+  }
+  .card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Detail view: one frame shown large, with a back button and its info. */
+  .detail {
+    max-width: 1300px;
+    margin: 0 auto;
+    display: none;
+  }
+  .detail.active { display: block; }
+  .gallery.hidden { display: none; }
+
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 24px;
+  }
+  .back-btn:hover { border-color: var(--accent); }
+
+  .detail-body {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .detail-body .card { cursor: default; }
+  .detail-body .card:hover { transform: none; border-color: rgba(255,255,255,0.06); }
+  .detail-info {
+    max-width: 360px;
+    padding-top: 8px;
+  }
+  .detail-info .num {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .detail-info h2 {
+    margin: 4px 0 12px;
+    font-size: 28px;
+  }
+  .detail-info p {
+    color: var(--muted);
+    line-height: 1.6;
+    font-size: 14px;
+  }
+  .detail-nav {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .detail-nav button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .detail-nav button:hover { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -149,11 +229,27 @@
   <p>Taste of Korea 인생네컷 포토부스 · 샘플 프레임 비교 페이지 (선택용, 실제 등록 전)</p>
 </header>
 
-<div class="legend">
-  <b>회색/투명 영역</b> = 실제 방문객 사진이 들어갈 슬롯 · 모든 카드는 동일한 미리보기 높이(<b id="stage-h-label"></b>)로 정렬되어 있어 10종을 한눈에 비교할 수 있습니다.
+<div class="legend" id="legend">
+  <b>회색/투명 영역</b> = 실제 방문객 사진이 들어갈 슬롯 · 모든 카드는 동일한 미리보기 높이(<b id="stage-h-label"></b>)로 정렬되어 있어 10종을 한눈에 비교할 수 있습니다. 카드를 클릭하면 크게 볼 수 있습니다.
 </div>
 
 <div class="gallery" id="gallery"></div>
+
+<div class="detail" id="detail">
+  <button class="back-btn" id="back-btn">← 목록으로</button>
+  <div class="detail-body">
+    <div class="card" id="detail-card"></div>
+    <div class="detail-info">
+      <div class="num" id="detail-num"></div>
+      <h2 id="detail-name"></h2>
+      <p id="detail-meta"></p>
+      <div class="detail-nav">
+        <button id="prev-btn">← 이전</button>
+        <button id="next-btn">다음 →</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
   document.getElementById('stage-h-label').textContent =
@@ -175,16 +271,30 @@
   const slotClasses = t => t === 'strip' ? ['s0','s1','s2','s3'] : ['g0','g1','g2','g3'];
 
   const gallery = document.getElementById('gallery');
+  const legend = document.getElementById('legend');
+  const detail = document.getElementById('detail');
+  const detailCard = document.getElementById('detail-card');
+  const detailNum = document.getElementById('detail-num');
+  const detailName = document.getElementById('detail-name');
+  const detailMeta = document.getElementById('detail-meta');
 
-  FRAMES.forEach(f => {
+  // Builds the .card element for a frame (stage + slots + placeholders + SVG + label).
+  // Shared by the grid view and the detail view so both stay pixel-identical.
+  function buildCard(f, stageHeightPx) {
     const card = document.createElement('div');
     card.className = 'card';
+    card.dataset.file = f.file;
 
     const stage = document.createElement('div');
     stage.className = 'stage';
+    if (stageHeightPx) stage.style.setProperty('--stage-h', stageHeightPx + 'px');
 
     const wrap = document.createElement('div');
     wrap.className = 'frame-wrap ' + (f.type === 'strip' ? 'strip-type' : 'grid-type');
+    if (stageHeightPx) {
+      wrap.style.height = stageHeightPx + 'px';
+      wrap.style.width = (f.type === 'strip' ? stageHeightPx / 3 : stageHeightPx) + 'px';
+    }
 
     slotClasses(f.type).forEach((cls, i) => {
       const slot = document.createElement('div');
@@ -210,8 +320,64 @@
 
     card.appendChild(stage);
     card.appendChild(label);
+    return card;
+  }
+
+  FRAMES.forEach(f => {
+    const card = buildCard(f);
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.addEventListener('click', () => { location.hash = f.file.replace('.svg', ''); });
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); location.hash = f.file.replace('.svg', ''); }
+    });
     gallery.appendChild(card);
   });
+
+  function frameByHashId(hashId) {
+    return FRAMES.find(f => f.file.replace('.svg', '') === hashId);
+  }
+
+  function showDetail(f) {
+    const idx = FRAMES.indexOf(f);
+    detailCard.replaceWith(buildCard(f, 560));
+    // buildCard's result just replaced #detail-card, so re-grab it by the
+    // stable container position rather than the (now stale) id reference.
+    document.querySelector('.detail-body .card').id = 'detail-card';
+
+    detailNum.textContent = f.n + '.';
+    detailName.textContent = f.name;
+    detailMeta.textContent = (f.type === 'strip' ? '스트립 레이아웃 (1200×3600, 4컷 세로)' : '그리드 레이아웃 (2400×2400, 2×2)') +
+      ' · 회색 영역은 실제 방문객 사진이 들어갈 자리입니다.';
+
+    document.getElementById('prev-btn').onclick = () => {
+      location.hash = FRAMES[(idx - 1 + FRAMES.length) % FRAMES.length].file.replace('.svg', '');
+    };
+    document.getElementById('next-btn').onclick = () => {
+      location.hash = FRAMES[(idx + 1) % FRAMES.length].file.replace('.svg', '');
+    };
+
+    gallery.classList.add('hidden');
+    legend.classList.add('hidden');
+    detail.classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  function showGrid() {
+    gallery.classList.remove('hidden');
+    legend.classList.remove('hidden');
+    detail.classList.remove('active');
+  }
+
+  function renderFromHash() {
+    const hashId = location.hash.replace('#', '');
+    const f = hashId ? frameByHashId(hashId) : null;
+    if (f) showDetail(f); else showGrid();
+  }
+
+  document.getElementById('back-btn').addEventListener('click', () => { location.hash = ''; });
+  window.addEventListener('hashchange', renderFromHash);
+  renderFromHash();
 </script>
 
 </body>
