@@ -146,6 +146,11 @@ const SETTINGS_FIELDS = [
   { key: 'qrTimeoutSec', label: 'QR 화면 타임아웃(초)', type: 'number' },
   { key: 'autoDeleteHours', label: '자동 삭제(시간)', type: 'number' },
   { key: 'cloudUploadTimeoutMs', label: '클라우드 업로드 제한시간(ms)', type: 'number' },
+  {
+    key: 'firebaseStorageBucket',
+    label: 'Firebase Storage 버킷 (비워두면 클라우드 QR 비활성)',
+    type: 'text',
+  },
   { key: 'defaultLang', label: '기본 언어', type: 'select', options: ['ko', 'en'] },
 ];
 
@@ -176,6 +181,10 @@ function renderSettingsForm(settings) {
         input.appendChild(optEl);
       }
       input.value = settings[field.key];
+    } else if (field.type === 'text') {
+      input = document.createElement('input');
+      input.type = 'text';
+      input.value = settings[field.key] || '';
     } else {
       input = document.createElement('input');
       input.type = 'number';

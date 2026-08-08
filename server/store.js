@@ -35,6 +35,13 @@ const DEFAULT_SETTINGS = {
   // How long /api/final waits for the cloud upload before falling back to
   // the LAN-only URL (see server/cloud.js + CLOUD.md).
   cloudUploadTimeoutMs: 8000,
+  // Bucket name for cloud delivery (server/cloud.js). The FIREBASE_STORAGE_BUCKET
+  // env var, if set, always wins (useful for local dev/testing) — but a shell
+  // env var must be re-exported every time the server process is launched,
+  // which is easy to forget on event day and fails *silently* into LAN-only
+  // mode with no visible error. Persisting the bucket name here instead means
+  // setting it once via /admin keeps working across every future restart.
+  firebaseStorageBucket: '',
 };
 
 const DEFAULT_STATS = {

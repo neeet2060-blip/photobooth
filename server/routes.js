@@ -419,6 +419,15 @@ function registerRoutes(app, deps) {
       next.defaultLang = body.defaultLang;
     }
 
+    if (body.firebaseStorageBucket !== undefined) {
+      // Practical GCS bucket-name allowlist: lowercase letters, digits,
+      // dots, dashes, underscores. Empty string is valid (means "cloud
+      // delivery off unless FIREBASE_STORAGE_BUCKET env var is set").
+      if (body.firebaseStorageBucket !== '' && !/^[a-z0-9][a-z0-9._-]{1,253}$/.test(body.firebaseStorageBucket)) {
+        return res.status(400).json({ ok: false, error: 'invalid_firebaseStorageBucket' });
+      }
+      next.firebaseStorageBucket = body.firebaseStorageBucket;
+    }
     if (body.printingEnabled !== undefined) {
       if (typeof body.printingEnabled !== 'boolean') {
         return res.status(400).json({ ok: false, error: 'invalid_printingEnabled' });
@@ -483,7 +492,7 @@ function registerRoutes(app, deps) {
     res.json({
       ok: true,
       enabled,
-      bucket: enabled ? cloud.BUCKET_NAME : null,
+      bucket: enabled ? cloud.resolveBucketName() : null,
       uploadTimeoutMs: settings.cloudUploadTimeoutMs,
       cloudDeliveredCount,
       lanFallbackCount,

@@ -8,3 +8,7 @@ data/print-jobs/
 data/print-outbox/
 data/*.json
 .DS_Store
+# Firebase service-account credentials for cloud delivery (see CLOUD.md).
+# Never commit the real JSON; .gitkeep keeps the folder itself in git.
+secrets/*
+!secrets/.gitkeep

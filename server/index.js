@@ -10,7 +10,7 @@ const { Server: SocketIOServer } = require('socket.io');
 const store = require('./store');
 const { getOrCreateCerts } = require('./certs');
 const { getLanIp } = require('./ip');
-const { registerRoutes } = require('./routes');
+const { registerRoutes, sweepExpiredTokens } = require('./routes');
 const stateMachine = require('./state');
 const printqueue = require('./printqueue');
 
@@ -264,10 +264,26 @@ function sweepOldPrintFiles() {
   }
 }
 
+// Deletes the cloud copy (if any) of expired token records and prunes them
+// from tokens.json — the LAN-side photo files themselves are still handled
+// by sweepOldPhotos above; this only concerns the cloud object + token
+// bookkeeping (see server/cloud.js, server/routes.js#sweepExpiredTokens).
+function sweepExpiredCloudTokens() {
+  const settings = store.readSettings();
+  sweepExpiredTokens(settings).catch((err) => {
+    // sweepExpiredTokens already catches per-token errors internally; this
+    // is just a last-resort guard so an unexpected bug never kills the
+    // interval.
+    console.warn('[cloud] token sweep failed unexpectedly:', err.message);
+  });
+}
+
 setInterval(sweepOldPhotos, AUTO_DELETE_SWEEP_INTERVAL_MS);
 sweepOldPhotos();
 setInterval(sweepOldPrintFiles, AUTO_DELETE_SWEEP_INTERVAL_MS);
 sweepOldPrintFiles();
+setInterval(sweepExpiredCloudTokens, AUTO_DELETE_SWEEP_INTERVAL_MS);
+sweepExpiredCloudTokens();
 
 // ---- Startup ----
 
