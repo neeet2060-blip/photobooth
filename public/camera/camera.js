@@ -8,9 +8,14 @@ const startOverlay = document.getElementById('start-overlay');
 const startBtn = document.getElementById('start-btn');
 const startTitle = document.getElementById('start-title');
 const mirrorBtn = document.getElementById('mirror-btn');
+const cameraSelect = document.getElementById('camera-select');
 
 const CAPTURE_WIDTH = 1600;
 const CAPTURE_HEIGHT = 1200; // 4:3
+// Persists the operator's camera pick (e.g. a DSLR exposed as a webcam via
+// Canon EOS Webcam Utility) across reloads, since a laptop with a built-in
+// camera AND a tethered DSLR will otherwise fall back to an arbitrary one.
+const CAMERA_DEVICE_STORAGE_KEY = 'photobooth-camera-device-id';
 
 let lastState = null;
 let mirrored = false;
@@ -20,6 +25,7 @@ let countdownOverlayEl = null;
 startTitle.textContent = t('cameraWaiting');
 startBtn.textContent = t('cameraStart');
 mirrorBtn.textContent = t('cameraMirror');
+cameraSelect.setAttribute('aria-label', t('cameraSelectLabel'));
 
 connectSocket();
 
@@ -48,6 +54,8 @@ startBtn.addEventListener('click', async () => {
   }
 });
 
+populateCameraList();
+
 mirrorBtn.addEventListener('click', () => {
   mirrored = !mirrored;
   video.classList.toggle('mirror', mirrored);
@@ -57,8 +65,48 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') requestWakeLock();
 });
 
+/**
+ * Populates the camera picker BEFORE the operator presses "카메라 시작", so a
+ * laptop with both a built-in webcam and a tethered DSLR (via Canon EOS
+ * Webcam Utility or similar) lets the operator pick the right one instead of
+ * silently getting whichever the browser defaults to. Only shown when more
+ * than one video input exists — a single-camera device (a phone) never
+ * needs this and stays exactly as before.
+ */
+async function populateCameraList() {
+  let probeStream = null;
+  try {
+    // Device labels are blank until a getUserMedia grant has happened at
+    // least once; this probe stream exists only to unlock labels and is
+    // stopped immediately, before the operator ever sees a preview.
+    probeStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  } catch (_) {
+    return; // No camera access yet — the normal "카메라 시작" flow still works.
+  } finally {
+    if (probeStream) probeStream.getTracks().forEach((track) => track.stop());
+  }
+
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+  if (videoInputs.length <= 1) return; // Nothing to choose between.
+
+  const savedDeviceId = localStorage.getItem(CAMERA_DEVICE_STORAGE_KEY);
+  videoInputs.forEach((device, index) => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || `${t('cameraSelectDefault')} ${index + 1}`;
+    cameraSelect.appendChild(option);
+  });
+  if (savedDeviceId && videoInputs.some((d) => d.deviceId === savedDeviceId)) {
+    cameraSelect.value = savedDeviceId;
+  }
+  cameraSelect.style.display = '';
+}
+
 async function startCamera() {
+  const selectedDeviceId = cameraSelect.style.display !== 'none' ? cameraSelect.value : '';
   const constraintsList = [
+    ...(selectedDeviceId ? [{ video: { deviceId: { exact: selectedDeviceId } }, audio: false }] : []),
     { video: { facingMode: { exact: 'environment' } }, audio: false },
     { video: { facingMode: 'environment' }, audio: false },
     { video: { facingMode: 'user' }, audio: false },
@@ -71,6 +119,7 @@ async function startCamera() {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = stream;
       await video.play();
+      if (selectedDeviceId) localStorage.setItem(CAMERA_DEVICE_STORAGE_KEY, selectedDeviceId);
       return;
     } catch (err) {
       lastErr = err;
