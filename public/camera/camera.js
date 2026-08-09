@@ -44,13 +44,26 @@ onEvent('capture-now', ({ sessionId }) => {
   captureAndUpload();
 });
 
+let startInProgress = false;
+
 startBtn.addEventListener('click', async () => {
+  // Guards against a double-click (or an impatient second click while a slow
+  // virtual camera — e.g. a DSLR via EOS Webcam Utility — is still spinning
+  // up) firing a second overlapping getUserMedia()/video.play() call, which
+  // races the first and surfaces as "play() request was interrupted by a new
+  // load request."
+  if (startInProgress) return;
+  startInProgress = true;
+  startBtn.disabled = true;
   try {
     await startCamera();
     startOverlay.style.display = 'none';
     requestWakeLock();
   } catch (err) {
     startTitle.textContent = `${t('errorGeneric')}: ${err.message}`;
+  } finally {
+    startInProgress = false;
+    startBtn.disabled = false;
   }
 });
 
@@ -118,7 +131,20 @@ async function startCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = stream;
-      await video.play();
+      try {
+        await video.play();
+      } catch (playErr) {
+        // Some virtual cameras (e.g. a DSLR exposed via EOS Webcam Utility)
+        // swap their internal source once while spinning up, which can abort
+        // this first play() with "interrupted by a new load request" even
+        // though the stream itself is fine — one retry (same stream, no new
+        // getUserMedia call) clears it without discarding a working device.
+        if (playErr && playErr.name === 'AbortError') {
+          await video.play();
+        } else {
+          throw playErr;
+        }
+      }
       if (selectedDeviceId) localStorage.setItem(CAMERA_DEVICE_STORAGE_KEY, selectedDeviceId);
       return;
     } catch (err) {
