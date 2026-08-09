@@ -107,16 +107,30 @@ function getBucket() {
   }
 
   try {
+    // firebase-admin v12+ replaced the old namespaced API
+    // (admin.credential.cert, admin.apps, app.storage()) with a modular one.
+    // admin.cert/admin.getApps/admin.getApp/admin.initializeApp live on the
+    // top-level 'firebase-admin' import; the Storage bucket handle comes
+    // from the separate 'firebase-admin/storage' submodule instead of an
+    // app.storage() method. Confirmed against the installed v14.2.0 by
+    // inspecting Object.keys(require('firebase-admin')) directly — the old
+    // API silently returns `undefined` rather than throwing at the call
+    // site, which is what made this fail quietly before.
     // eslint-disable-next-line global-require
     const admin = require('firebase-admin');
-    const app = admin.apps && admin.apps.length ? admin.app() : admin.initializeApp({
-      credential: admin.credential.cert(credentials),
+    // eslint-disable-next-line global-require
+    const { getStorage } = require('firebase-admin/storage');
+    const app = admin.getApps().length ? admin.getApp() : admin.initializeApp({
+      credential: admin.cert(credentials),
       storageBucket: bucketName,
     });
-    cachedBucket = app.storage().bucket(bucketName);
+    cachedBucket = getStorage(app).bucket(bucketName);
     return cachedBucket;
   } catch (err) {
-    warnOnce('disabled — firebase-admin initialization failed.');
+    // err.message from firebase-admin is a description of what went wrong
+    // (e.g. a malformed key, bad project id) — it never embeds the actual
+    // key material, so it's safe to log for diagnosis.
+    warnOnce(`disabled — firebase-admin initialization failed: ${(err && err.message) || err}`);
     return null;
   }
 }
