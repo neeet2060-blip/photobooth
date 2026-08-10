@@ -463,6 +463,10 @@ function renderPayment(state) {
 
   children.push(
     el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
+      // 'cancel'은 state.js에서 이미 PAYMENT 단계까지 허용돼 있었지만(테스트/취소 목적)
+      // 이 화면엔 버튼이 없었음(2026-08-11) — 세션을 완전히 처음으로 되돌린다(수량 화면으로만
+      // 돌아가는 backToQuantity와 다름).
+      el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
       el('button', { onclick: () => sendAction('backToQuantity') }, t('paymentBackButton')),
       // Staff-operated: this booth screen sits with staff at this step, same
       // as the rest of the flow (no separate staff-vs-customer surface exists
