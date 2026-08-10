@@ -146,7 +146,11 @@ export async function composePrintSheet({ canvas, layoutName, photoUrls, frameUr
     ctx.fillText(CAPTION_TEXT, PRINT_SHEET_WIDTH / 2, GRID_TOP_HEIGHT + (PRINT_SHEET_HEIGHT - GRID_TOP_HEIGHT) / 2);
     ctx.restore();
   } else {
-    throw new Error(`Unknown layout for print sheet: ${layoutName}`);
+    // 2026-08-11 — grid2a/grid2b(및 앞으로 추가될, 인화지 실물 비율에 맞춰 그려진 네이티브
+    // 레이아웃)는 캔버스가 이미 정확히 인쇄 시트와 같은 2:3 비율(1024x1536 → 1200x1800, 배율
+    // 1.171875로 가로세로 동일)이라 strip/grid처럼 절반씩 나누거나 여백+캡션을 넣을 필요 없이
+    // 시트 전체에 그대로 꽉 채운다.
+    ctx.drawImage(offscreen, 0, 0, offscreen.width, offscreen.height, 0, 0, PRINT_SHEET_WIDTH, PRINT_SHEET_HEIGHT);
   }
 
   return canvas;

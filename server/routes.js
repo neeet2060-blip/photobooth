@@ -13,6 +13,7 @@ const printqueue = require('./printqueue');
 const { PRINTER_NAME_REGEX, PRINT_MEDIA_REGEX } = require('./printer');
 const cloud = require('./cloud');
 const tokPayment = require('./tokPayment');
+const { LAYOUTS } = require('./layouts');
 
 const TOKEN_REGEX = /^[a-f0-9]{24}$/;
 
@@ -318,7 +319,12 @@ function registerRoutes(app, deps) {
       return res.status(400).json({ ok: false, error: 'missing_file' });
     }
     const name = typeof req.body.name === 'string' && req.body.name.trim() ? req.body.name.trim().slice(0, 80) : 'Untitled';
-    const layout = req.body.layout === 'grid' ? 'grid' : req.body.layout === 'strip' ? 'strip' : null;
+    // 2026-08-11: 하드코딩된 strip/grid 삼항연산자 대신 LAYOUTS의 실제 키 목록으로 검증한다 —
+    // 인생네컷 10x15cm 전용 grid2a/grid2b가 추가되면서, 새 레이아웃마다 이 파일을 또 고치지
+    // 않도록 layouts.js를 단일 진실 공급원으로 삼는다.
+    const layout = typeof req.body.layout === 'string' && Object.prototype.hasOwnProperty.call(LAYOUTS, req.body.layout)
+      ? req.body.layout
+      : null;
     if (!layout) {
       fs.unlink(req.file.path, () => {});
       return res.status(400).json({ ok: false, error: 'invalid_layout' });
