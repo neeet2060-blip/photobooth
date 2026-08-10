@@ -125,9 +125,9 @@ test('isEnabled() is true once a db is injected for tests', () => {
   tokPayment._stopAllPollsForTests();
 });
 
-// ---- onStateChange: writes an expOrders doc on entering PAYMENT ----
+// ---- onStateChange: writes an expOrders doc once a paymentMethod is chosen ----
 
-test('onStateChange writes an expOrders-shaped doc when entering PAYMENT with a printOrder', async () => {
+test('onStateChange does NOT create an order while paymentMethod is still null (entering PAYMENT alone)', async () => {
   process.env.TOK2026_EVENT_ID = 'test-event';
   const tokPayment = freshTokPayment();
   const fakeDb = makeFakeDb();
@@ -141,12 +141,38 @@ test('onStateChange writes an expOrders-shaped doc when entering PAYMENT with a 
     { phase: PHASES.PAYMENT, printOrder: { quantity: 3 }, sessionId: 's1', paymentMethod: null },
   );
 
+  assert.equal(fakeDb.docIds().length, 0);
+  assert.equal(tokPayment.getDeepLink('s1'), null);
+  tokPayment._stopAllPollsForTests();
+});
+
+test('onStateChange writes an expOrders-shaped doc once a paymentMethod is chosen', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 3 }, paymentMethod: null });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  // Entering PAYMENT alone creates nothing (see test above); the order is
+  // only written once choosePaymentMethod actually fires.
+  await tokPayment.onStateChange(
+    { phase: PHASES.QUANTITY, printOrder: { quantity: 3 }, sessionId: 's1' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 3 }, sessionId: 's1', paymentMethod: null },
+  );
+  await tokPayment.onStateChange(
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 3 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 3 }, sessionId: 's1', paymentMethod: 'sumup' },
+  );
+
   const docIds = fakeDb.docIds();
   assert.equal(docIds.length, 1);
   const doc = fakeDb.getDoc(docIds[0]);
   assert.equal(doc.boothKey, 'exp1');
   assert.equal(doc.participantCode, 'ONSITE');
   assert.equal(doc.participantName, '인생네컷');
+  assert.equal(doc.paymentMethod, 'card'); // local 'sumup' -> remote 'card', see mapToLocalPaymentMethod
   assert.equal(doc.paymentStatus, 'unpaid');
   assert.equal(doc.source, 'photobooth');
   assert.equal(doc.sessionId, 's1');
@@ -165,12 +191,82 @@ test('onStateChange does not create a second doc on a no-op re-dispatch within P
   const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: null });
   tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
 
-  const paymentState = { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null };
+  const paymentState = { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: 'sumup' };
   await tokPayment.onStateChange({ phase: PHASES.QUANTITY, printOrder: { quantity: 1 }, sessionId: 's1' }, paymentState);
   // e.g. a countdown-unrelated re-render / no-op action while still in PAYMENT
   await tokPayment.onStateChange(paymentState, { ...paymentState, updatedAt: Date.now() });
 
   assert.equal(fakeDb.docIds().length, 1);
+  tokPayment._stopAllPollsForTests();
+});
+
+test('switching payment method mid-PAYMENT patches the existing order instead of creating a second one', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: null });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.onStateChange(
+    { phase: PHASES.QUANTITY, printOrder: { quantity: 1 }, sessionId: 's1' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+  );
+  await tokPayment.onStateChange(
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: 'sumup' },
+  );
+  const [docId] = fakeDb.docIds();
+  assert.equal(fakeDb.getDoc(docId).paymentMethod, 'card');
+
+  // Participant changes their mind: sumup -> cash, still on the payment screen.
+  await tokPayment.onStateChange(
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: 'sumup' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: 'cash' },
+  );
+
+  assert.equal(fakeDb.docIds().length, 1); // still just the one order
+  assert.equal(fakeDb.getDoc(docId).paymentMethod, 'cash'); // patched in place
+
+  tokPayment._stopAllPollsForTests();
+});
+
+test('a cash order is confirmed by the same background poll as a card order (staff confirms on the TOK2026 side, not a local click)', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: null });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.onStateChange(
+    { phase: PHASES.QUANTITY, printOrder: { quantity: 1 }, sessionId: 's1' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+  );
+  await tokPayment.onStateChange(
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: 'cash' },
+  );
+  const [docId] = fakeDb.docIds();
+  assert.equal(fakeDb.getDoc(docId).paymentMethod, 'cash');
+
+  // Not yet confirmed by staff: polling must not dispatch anything.
+  await tokPayment._pollOnceForTests('s1');
+  assert.deepEqual(recorder.dispatched, []);
+
+  // Staff confirms cash receipt on TOK2026's exp1 pending-orders screen —
+  // simulated here as a direct paymentStatus flip, exactly like a card
+  // order's SumUp confirmation would look from this module's point of view.
+  fakeDb.setPaymentStatus(docId, 'paid');
+  await tokPayment._pollOnceForTests('s1');
+
+  assert.equal(recorder.dispatched.length, 2);
+  assert.equal(recorder.dispatched[0].type, 'choosePaymentMethod');
+  assert.equal(recorder.dispatched[0].payload.method, 'cash');
+  assert.equal(recorder.dispatched[1].type, 'confirmPrintPayment');
+
   tokPayment._stopAllPollsForTests();
 });
 
@@ -188,6 +284,10 @@ test('_pollOnceForTests dispatches choosePaymentMethod + confirmPrintPayment onc
   await tokPayment.onStateChange(
     { phase: PHASES.QUANTITY, printOrder: { quantity: 2 }, sessionId: 's1' },
     { phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, sessionId: 's1', paymentMethod: null },
+  );
+  await tokPayment.onStateChange(
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, sessionId: 's1', paymentMethod: 'sumup' },
   );
 
   const [docId] = fakeDb.docIds();
@@ -227,6 +327,10 @@ test('a session change before payment stops the poll and results in no dispatch'
   await tokPayment.onStateChange(
     { phase: PHASES.QUANTITY, printOrder: { quantity: 1 }, sessionId: 's1' },
     { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+  );
+  await tokPayment.onStateChange(
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: 'sumup' },
   );
   const [docId] = fakeDb.docIds();
   assert.ok(docId);
@@ -275,7 +379,7 @@ test('onStateChange uses the real exp1 menu price when a matching printQty varia
 
   await tokPayment.onStateChange(
     { phase: PHASES.QUANTITY, printOrder: { quantity: 3 }, sessionId: 's1' },
-    { phase: PHASES.PAYMENT, printOrder: { quantity: 3 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 3 }, sessionId: 's1', paymentMethod: 'sumup' },
   );
 
   const orderDocIds = fakeDb.docIds().filter((id) => id !== 'exp1');
@@ -308,7 +412,7 @@ test('a quantity-0 (QR-only) printOrder is stored with qty:1 and the real QR pri
 
   await tokPayment.onStateChange(
     { phase: PHASES.QUANTITY, printOrder: { quantity: 0 }, sessionId: 's1' },
-    { phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, sessionId: 's1', paymentMethod: 'sumup' },
   );
 
   const orderDocIds = fakeDb.docIds().filter((id) => id !== 'exp1');
@@ -331,7 +435,7 @@ test('a quantity-0 order with no configured QR variant falls back to a 0-price p
 
   await tokPayment.onStateChange(
     { phase: PHASES.QUANTITY, printOrder: { quantity: 0 }, sessionId: 's1' },
-    { phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, sessionId: 's1', paymentMethod: 'sumup' },
   );
 
   const [docId] = fakeDb.docIds();
@@ -355,7 +459,7 @@ test('getDeepLink returns a sumupmerchant:// deep link whose foreign-tx-id match
 
   await tokPayment.onStateChange(
     { phase: PHASES.QUANTITY, printOrder: { quantity: 2 }, sessionId: 's1' },
-    { phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, sessionId: 's1', paymentMethod: 'sumup' },
   );
 
   const [docId] = fakeDb.docIds();
@@ -390,7 +494,7 @@ test('a poll tick nudges TOK2026s immediate-confirm callable for a card/sumup or
 
   await tokPayment.onStateChange(
     { phase: PHASES.QUANTITY, printOrder: { quantity: 1 }, sessionId: 's1' },
-    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: 'sumup' },
   );
 
   await tokPayment._pollOnceForTests('s1');

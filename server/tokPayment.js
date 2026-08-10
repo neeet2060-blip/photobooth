@@ -59,7 +59,7 @@ let warnedOnce = false;
 let _dispatch = null;
 let _getState = null;
 
-// sessionId -> { docId, sessionId, localPaymentMethod, deepLink, intervalId }
+// sessionId -> { docId, sessionId, remotePaymentMethod, localPaymentMethod, deepLink, intervalId }
 const activePolls = new Map();
 
 function warnOnce(message) {
@@ -216,12 +216,10 @@ async function startOrderForSession(nextState) {
   const db = getDb();
   if (!db) return;
 
-  // paymentMethod is not yet chosen at the instant a session freshly enters
-  // PAYMENT in the current state machine (choosePaymentMethod is always a
-  // later, separate action) — but stay defensive in case that ever changes.
-  // 'card' is a best-effort guess either way; the actual charged amount
-  // always comes from TOK2026's own configured menu price (looked up below),
-  // never guessed here.
+  // Only ever called once nextState.paymentMethod is already set (see
+  // onStateChange below) — so this is the visitor's real chosen method, not
+  // a guess. A participant who switches method before paying goes through
+  // syncOrderPaymentMethod instead of creating a second order.
   const remotePaymentMethod = nextState.paymentMethod === 'cash' ? 'cash' : 'card';
   const localPaymentMethod = mapToLocalPaymentMethod(remotePaymentMethod);
   const { quantity } = nextState.printOrder;
@@ -298,10 +296,35 @@ async function startOrderForSession(nextState) {
   activePolls.set(nextState.sessionId, {
     docId: ref.id,
     sessionId: nextState.sessionId,
+    remotePaymentMethod,
     localPaymentMethod,
     deepLink,
     intervalId,
   });
+}
+
+/**
+ * A participant can switch between 'sumup' and 'cash' while still on the
+ * payment screen (before either is actually confirmed) — this patches the
+ * already-created order's paymentMethod in place instead of creating a
+ * second order, so TOK2026 staff always see the visitor's current real
+ * choice (critical for cash: staff needs to know to collect cash, not wait
+ * on a SumUp transaction that will never arrive).
+ */
+async function syncOrderPaymentMethod(nextState, entry) {
+  const remotePaymentMethod = nextState.paymentMethod === 'cash' ? 'cash' : 'card';
+  if (entry.remotePaymentMethod === remotePaymentMethod) return;
+
+  const db = getDb();
+  if (!db) return;
+  try {
+    await expOrdersCollection(db).doc(entry.docId).set({ paymentMethod: remotePaymentMethod }, { merge: true });
+  } catch (err) {
+    warnOnce(`failed to update paymentMethod on expOrders doc ${entry.docId}: ${(err && err.message) || err}`);
+    return;
+  }
+  entry.remotePaymentMethod = remotePaymentMethod;
+  entry.localPaymentMethod = mapToLocalPaymentMethod(remotePaymentMethod);
 }
 
 /**
@@ -397,12 +420,23 @@ async function onStateChange(prevState, nextState) {
 
   reconcilePolls(nextState);
 
-  const enteredPaymentWithOrder = nextState.phase === PHASES.PAYMENT
+  // The order is created (or, if one already exists for this session,
+  // patched) the moment BOTH a printOrder and a chosen paymentMethod exist
+  // — never earlier. Creating it before the method is known would force a
+  // guess (previously always defaulted to 'card'), which mattered little
+  // for price but is wrong for staff-facing display: a cash order showing
+  // paymentMethod:'card' would leave TOK2026's exp1 staff waiting on a
+  // SumUp transaction that will never happen instead of collecting cash.
+  const ready = nextState.phase === PHASES.PAYMENT
     && Boolean(nextState.printOrder)
-    && (prevState.phase !== PHASES.PAYMENT || !prevState.printOrder);
+    && Boolean(nextState.paymentMethod);
+  if (!ready) return;
 
-  if (enteredPaymentWithOrder) {
+  const entry = activePolls.get(nextState.sessionId);
+  if (!entry) {
     await startOrderForSession(nextState);
+  } else {
+    await syncOrderPaymentMethod(nextState, entry);
   }
 }
 
