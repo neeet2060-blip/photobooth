@@ -388,12 +388,67 @@ function totalCentsFor(quantity, printSettings) {
   return qrUnitPriceCents;
 }
 
+// 이 QUANTITY phase에 처음 들어왔을 때 "QR vs 실제인쇄" 중 뭘 골랐는지는 서버 상태(printOrder)
+// 로는 표현되지 않는 순수 화면 단계라 클라이언트 로컬로 따로 들고 있는다(2026-08-11). 세션이
+// 바뀌면(재시작·새 손님) 자동으로 선택 화면으로 초기화된다.
+let quantityScreenStep = 'choose'; // 'choose' | 'count'
+let quantityScreenSessionId = null;
+
 function renderQuantity(state) {
+  if (quantityScreenSessionId !== state.sessionId) {
+    quantityScreenSessionId = state.sessionId;
+    quantityScreenStep = 'choose';
+  }
+
   const printOrder = state.printOrder;
   const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
+  const qrRequiresPayment = Boolean(printSettingsCache && printSettingsCache.qrRequiresPayment);
+  const qrUnitPriceCents = (printSettingsCache && printSettingsCache.qrUnitPriceCents) || 0;
+
+  if (quantityScreenStep === 'choose') {
+    const qrPriceLabel = qrRequiresPayment ? formatEuros(qrUnitPriceCents) : t('quantityFreeLabel');
+    const printPriceLabel = printSettingsCache
+      ? t('quantityChoicePrintFrom', { price: formatEuros(totalCentsFor(MIN_PRINT_QUANTITY, printSettingsCache)) })
+      : '';
+    return el('div', { class: 'screen' }, [
+      el('h1', {}, t('quantityChoiceTitle')),
+      el('div', { style: 'display:flex;gap:16px;justify-content:center;flex-wrap:wrap;' }, [
+        el(
+          'button',
+          {
+            class: 'choice-card',
+            onclick: () => {
+              // QR만 — 매수 조정 화면 없이 곧장 0으로 확정하고 결제로 진행.
+              sendAction('setPrintQuantity', { quantity: 0 });
+              sendAction('confirmPrintQuantity');
+            },
+          },
+          [el('div', {}, t('quantityChoiceQr')), el('div', {}, qrPriceLabel)],
+        ),
+        el(
+          'button',
+          {
+            class: 'choice-card',
+            onclick: () => {
+              if (!printOrder || printOrder.quantity < MIN_PRINT_QUANTITY) {
+                sendAction('setPrintQuantity', { quantity: MIN_PRINT_QUANTITY });
+              }
+              quantityScreenStep = 'count';
+              render(lastState);
+            },
+          },
+          [el('div', {}, t('quantityChoicePrint')), el('div', {}, printPriceLabel)],
+        ),
+      ]),
+      el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
+        el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
+      ]),
+    ]);
+  }
+
+  // step === 'count': 실제인쇄를 고른 뒤에만 오는, 기존 매수 조정 화면(0으로는 못 내려감 — QR은
+  // 위 선택 화면에서 이미 별도로 처리됨).
   const maxQuantity = (printSettingsCache && printSettingsCache.maxPrintQuantity) || FALLBACK_MAX_PRINT_QUANTITY;
-  // 0장(QR만)은 qrRequiresPayment가 켜져 있을 때만 선택 가능 — 그 외엔 기존처럼 최소 1장.
-  const minQuantity = (printSettingsCache && printSettingsCache.qrRequiresPayment) ? 0 : MIN_PRINT_QUANTITY;
   const totalLabel = printSettingsCache
     ? t('quantityTotal', { total: formatEuros(totalCentsFor(quantity, printSettingsCache)) })
     : t('quantityOf', { quantity });
@@ -404,12 +459,12 @@ function renderQuantity(state) {
       el(
         'button',
         {
-          disabled: quantity <= minQuantity ? 'disabled' : null,
+          disabled: quantity <= MIN_PRINT_QUANTITY ? 'disabled' : null,
           onclick: () => sendAction('setPrintQuantity', { quantity: quantity - 1 }),
         },
         '-',
       ),
-      el('div', {}, quantity === 0 ? t('quantityQrOnly') : t('quantityOf', { quantity })),
+      el('div', {}, t('quantityOf', { quantity })),
       el(
         'button',
         {
@@ -421,7 +476,7 @@ function renderQuantity(state) {
     ]),
     el('div', { class: 'progress-text' }, totalLabel),
     el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
-      el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
+      el('button', { onclick: () => { quantityScreenStep = 'choose'; render(lastState); } }, t('quantityBackButton')),
       el(
         'button',
         { class: 'primary big-button', onclick: () => sendAction('confirmPrintQuantity') },

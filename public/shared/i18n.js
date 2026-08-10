@@ -15,7 +15,14 @@ const DICT = {
     formatOptionStrip: '포토카드 형태',
     formatOptionGrid: '스테이지 형태',
     themeTitle: '프레임을 선택하세요',
-    quantityTitle: '인화 매수를 선택하세요',
+    // 2026-08-11 — 수량 화면을 "QR vs 실제 인쇄" 선택 화면과 "매수 조정" 화면 둘로 분리.
+    quantityChoiceTitle: '받는 방식을 선택하세요',
+    quantityChoiceQr: 'QR코드로 받기',
+    quantityChoicePrint: '실제 사진 인쇄',
+    quantityChoicePrintFrom: '{price}부터',
+    quantityFreeLabel: '무료',
+    quantityBackButton: '뒤로',
+    quantityTitle: '인쇄 매수를 선택하세요',
     quantityOf: '{quantity}장',
     // QR 결제게이트(2026-08-10) — qrRequiresPayment 켜져 있을 때 수량 0(QR만, 인쇄 안 함) 표시.
     quantityQrOnly: 'QR만 (인쇄 안 함)',
@@ -115,7 +122,28 @@ const DICT = {
       'Photos taken here are used only for on-site printing/download and will be automatically deleted after a set time. By continuing you agree to being photographed and to this usage.',
     agreeButton: 'Agree & Start',
     cancelButton: 'Cancel',
+    formatTitle: 'Choose a format',
+    formatOptionStrip: 'Photocard format',
+    formatOptionGrid: 'Stage format',
     themeTitle: 'Choose a frame',
+    quantityChoiceTitle: 'Choose how to get your photos',
+    quantityChoiceQr: 'Get via QR code',
+    quantityChoicePrint: 'Print photos',
+    quantityChoicePrintFrom: 'From {price}',
+    quantityFreeLabel: 'Free',
+    quantityBackButton: 'Back',
+    quantityTitle: 'Choose print quantity',
+    quantityOf: '{quantity} prints',
+    quantityQrOnly: 'QR only (no print)',
+    quantityTotal: 'Total: {total}',
+    quantityConfirmButton: 'Proceed to payment',
+    paymentTitle: 'Choose a payment method',
+    paymentMethodSumup: 'Card (SumUp)',
+    paymentMethodCash: 'Cash',
+    paymentTotalLabel: 'Amount due: {total}',
+    paymentAwaiting: 'Please complete payment',
+    paymentBackButton: 'Change quantity',
+    paymentConfirmButton: 'Confirm payment (staff)',
     captureTitle: 'Taking photos',
     shotsProgress: '{taken} / {total} shots',
     shutterButton: 'Shutter',
@@ -193,18 +221,129 @@ const DICT = {
     filterVivid: 'Vivid',
     errorGeneric: 'Something went wrong',
   },
+  de: {
+    appName: 'Fotobox',
+    attractTitle: 'Fotobox',
+    attractSubtitle: 'Bildschirm berühren zum Starten',
+    startButton: 'Start',
+    consentTitle: 'Foto- und Bildrechte-Hinweis',
+    consentBody:
+      'Die hier aufgenommenen Fotos werden ausschließlich zum Ausdrucken/Herunterladen vor Ort verwendet und nach einer festgelegten Zeit automatisch gelöscht. Mit dem Fortfahren stimmen Sie zu, fotografiert und diese Fotos verwendet zu werden.',
+    agreeButton: 'Zustimmen & Starten',
+    cancelButton: 'Abbrechen',
+    formatTitle: 'Wählen Sie ein Format',
+    formatOptionStrip: 'Fotokarten-Format',
+    formatOptionGrid: 'Bühnen-Format',
+    themeTitle: 'Wählen Sie einen Rahmen',
+    quantityChoiceTitle: 'Wählen Sie, wie Sie Ihre Fotos erhalten möchten',
+    quantityChoiceQr: 'Per QR-Code erhalten',
+    quantityChoicePrint: 'Fotos ausdrucken',
+    quantityChoicePrintFrom: 'Ab {price}',
+    quantityFreeLabel: 'Kostenlos',
+    quantityBackButton: 'Zurück',
+    quantityTitle: 'Wählen Sie die Anzahl der Abzüge',
+    quantityOf: '{quantity} Abzüge',
+    quantityQrOnly: 'Nur QR-Code (kein Ausdruck)',
+    quantityTotal: 'Gesamt: {total}',
+    quantityConfirmButton: 'Zur Zahlung',
+    paymentTitle: 'Wählen Sie eine Zahlungsmethode',
+    paymentMethodSumup: 'Karte (SumUp)',
+    paymentMethodCash: 'Bar',
+    paymentTotalLabel: 'Zu zahlender Betrag: {total}',
+    paymentAwaiting: 'Bitte Zahlung abschließen',
+    paymentBackButton: 'Menge ändern',
+    paymentConfirmButton: 'Zahlung bestätigen (Personal)',
+    captureTitle: 'Fotos werden aufgenommen',
+    shotsProgress: '{taken} / {total} Aufnahmen',
+    shutterButton: 'Auslöser',
+    finishEarlyButton: 'Vorzeitig beenden',
+    selectTitle: 'Wählen Sie Ihre 4 Favoriten in der gewünschten Reihenfolge',
+    selectProgress: '{count} / 4 ausgewählt',
+    retakeButton: 'Wiederholen',
+    changeThemeButton: 'Rahmen ändern',
+    confirmPicksButton: 'Auswahl bestätigen',
+    filterTitle: 'Wählen Sie einen Filter',
+    confirmFinalButton: 'Fertigstellen',
+    qrTitle: 'Fertig!',
+    qrSubtitle: 'Scannen Sie den QR-Code unten, um Ihre Fotos herunterzuladen',
+    restartButton: 'Neu starten',
+    qrPrintOrderButton: 'Abzüge bestellen',
+    qrPrintQuantityLabel: 'Wählen Sie die Anzahl der Abzüge',
+    qrPrintQuantityOf: '{quantity} Abzüge',
+    qrPrintConfirmQuantityButton: 'Menge bestätigen',
+    qrPrintCancelButton: 'Bestellung stornieren',
+    qrPrintAwaitingPayment: 'Bitte zahlen Sie mit Karte an der Theke',
+    qrPrintTotal: 'Gesamt: {total}',
+    qrPrintConfirmPaymentButton: 'Zahlung bestätigen (Personal)',
+    remoteTitle: 'Fernbedienung',
+    remoteWaiting: 'Warten auf Start...',
+    remoteShots: 'Verbleibende Aufnahmen: {remaining}',
+    displayIdle: 'Fotobox',
+    displayIdleSub: 'Bitte am Tablet starten',
+    displaySelecting: 'Auswahl läuft...',
+    displayFiltering: 'Filter wird angewendet...',
+    displayQr: 'Scannen zum Herunterladen!',
+    cameraStart: 'Kamera starten',
+    cameraWaiting: 'Warten',
+    cameraMirror: 'Spiegeln',
+    cameraSelectLabel: 'Kamera auswählen',
+    cameraSelectDefault: 'Standardkamera',
+    downloadTitle: 'Mein Foto',
+    downloadButton: 'Herunterladen',
+    downloadPrivacy: 'Dieses Foto wird nach {hours} Stunden automatisch gelöscht.',
+    notFoundTitle: 'Foto nicht gefunden',
+    notFoundBody: 'Dieses Foto konnte nicht gefunden werden oder ist abgelaufen.',
+    adminFrames: 'Rahmen',
+    adminSettings: 'Einstellungen',
+    adminStats: 'Statistik',
+    adminUpload: 'Hochladen',
+    adminActive: 'Aktiv',
+    adminInactive: 'Inaktiv',
+    adminDelete: 'Löschen',
+    adminMoveUp: 'Nach oben',
+    adminMoveDown: 'Nach unten',
+    adminSave: 'Speichern',
+    adminPrintSettings: 'Druckeinstellungen',
+    adminPrintQueue: 'Druckwarteschlange',
+    adminPrintSettlement: 'Umsatzabrechnung',
+    adminPrintRetry: 'Erneut versuchen',
+    adminPrintCancel: 'Abbrechen',
+    adminPrintNoJobs: 'Keine Aufträge in der Warteschlange',
+    adminPrintTotalSold: 'Verkaufte Abzüge',
+    adminPrintTotalRevenue: 'Gesamtumsatz',
+    adminPrintByDay: 'Umsatz nach Tag',
+    adminPrintByHour: 'Umsatz nach Stunde',
+    adminPrintOrders: 'Bestellverlauf',
+    adminCloud: 'Cloud',
+    adminCloudStatusEnabled: 'Aktiviert',
+    adminCloudStatusDisabled: 'Deaktiviert (nur LAN-URL)',
+    adminCloudBucket: 'Bucket',
+    adminCloudBucketNone: 'Nicht konfiguriert',
+    adminCloudUploadTimeout: 'Upload-Zeitlimit (ms)',
+    adminCloudDelivered: 'Über die Cloud zugestellte Fotos',
+    adminCloudLanFallback: 'Über LAN-URL zugestellte Fotos',
+    filterNone: 'Kein Filter',
+    filterWarm: 'Warm',
+    filterCool: 'Kühl',
+    filterBw: 'Schwarz-Weiß',
+    filterVintage: 'Vintage',
+    filterVivid: 'Lebendig',
+    errorGeneric: 'Etwas ist schiefgelaufen',
+  },
 };
 
+const LANGS = ['ko', 'en', 'de'];
+const LANG_LABEL = { ko: '한국어', en: 'English', de: 'Deutsch' };
 const STORAGE_KEY = 'photobooth.lang';
 
 export function getLang() {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'ko' || stored === 'en') return stored;
+  if (LANGS.includes(stored)) return stored;
   return 'ko';
 }
 
 export function setLang(lang) {
-  if (lang !== 'ko' && lang !== 'en') return;
+  if (!LANGS.includes(lang)) return;
   localStorage.setItem(STORAGE_KEY, lang);
 }
 
@@ -220,17 +359,21 @@ export function t(key, vars = {}) {
 
 /**
  * Creates a small floating language toggle button, appended to `container`.
+ * Cycles ko -> en -> de -> ko (2026-08-11, added German). The button always
+ * shows the language you're currently viewing in, not the next one to
+ * switch to — clearer with 3 options than the old "shows the target" scheme.
  * Calls `onChange(lang)` (and re-renders) whenever the language changes.
  */
 export function mountLangToggle(container, onChange) {
   const btn = document.createElement('button');
   btn.className = 'lang-toggle';
   const render = () => {
-    btn.textContent = getLang() === 'ko' ? 'EN' : '한국어';
+    btn.textContent = LANG_LABEL[getLang()];
   };
   render();
   btn.addEventListener('click', () => {
-    setLang(getLang() === 'ko' ? 'en' : 'ko');
+    const next = LANGS[(LANGS.indexOf(getLang()) + 1) % LANGS.length];
+    setLang(next);
     render();
     if (typeof onChange === 'function') onChange(getLang());
   });
