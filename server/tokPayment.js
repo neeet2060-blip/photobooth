@@ -36,13 +36,30 @@ const TOK2026_PROJECT_ID = 'taste-of-korea-3ac1b';
 const TOK2026_APP_NAME = 'tok2026';
 const POLL_INTERVAL_MS = 4000;
 
+// Public affiliate credentials (safe to embed — already shipped in TOK2026's
+// own client bundle, src/lib/constants.js). Used only to build a
+// sumupmerchant:// deep link; the real merchant secret (SUMUP_API_KEY) never
+// leaves TOK2026's Cloud Functions and this module never touches it.
+const SUMUP_AFFILIATE_KEY = 'sup_afk_kSOjqv0UaciJXkW5C2wq9kMoj04cp8DX';
+const SUMUP_APP_ID = 'MGA74PYT';
+
+// TOK2026's pollBoothCardPaymentsNow is an unauthenticated onCall (see
+// functions/index.js — safe because it only ever confirms a real matching
+// SumUp SUCCESSFUL transaction). Invoked here as a plain HTTPS POST
+// following the Firebase callable-function wire protocol ({data: {...}} in,
+// {result: ...}/{error: ...} out) — no Firebase client SDK needed from a
+// pure Admin-SDK/Node process. Best-effort only: the existing paymentStatus
+// poll below is still the source of truth, this just makes it fast instead
+// of waiting on TOK2026's 1-minute scheduled backstop.
+const POLL_BOOTH_CARD_PAYMENTS_URL = `https://europe-west3-${TOK2026_PROJECT_ID}.cloudfunctions.net/pollBoothCardPaymentsNow`;
+
 let cachedDb = null; // real (lazily-initialized) or injected-for-tests Firestore handle
 let warnedOnce = false;
 
 let _dispatch = null;
 let _getState = null;
 
-// sessionId -> { docId, sessionId, localPaymentMethod, intervalId }
+// sessionId -> { docId, sessionId, localPaymentMethod, deepLink, intervalId }
 const activePolls = new Map();
 
 function warnOnce(message) {
@@ -255,9 +272,13 @@ async function startOrderForSession(nextState) {
     docData.createdAt = Date.now();
   }
 
-  let ref;
+  // Pre-generate the doc ID (instead of .add()) so it's known synchronously,
+  // before the write even completes — TOK2026's auto-confirmation matches a
+  // SumUp transaction back to an order via foreign-tx-id === this doc's own
+  // ID, so the deep link needs the ID up front.
+  const ref = expOrdersCollection(db).doc();
   try {
-    ref = await expOrdersCollection(db).add(docData);
+    await ref.set(docData);
   } catch (err) {
     warnOnce(`failed to create expOrders doc: ${(err && err.message) || err}`);
     return;
@@ -265,6 +286,10 @@ async function startOrderForSession(nextState) {
 
   // The session may have moved on while the (async) create was in flight.
   if (!isPollStillLive(nextState.sessionId)) return;
+
+  const deepLink = `sumupmerchant://pay/1.0?amount=${docData.total.toFixed(2)}&currency=EUR`
+    + `&affiliate-key=${SUMUP_AFFILIATE_KEY}&app-id=${SUMUP_APP_ID}`
+    + `&title=${encodeURIComponent(name)}&foreign-tx-id=${encodeURIComponent(ref.id)}`;
 
   const intervalId = setInterval(() => {
     pollOnce(nextState.sessionId).catch(() => {});
@@ -274,9 +299,39 @@ async function startOrderForSession(nextState) {
     docId: ref.id,
     sessionId: nextState.sessionId,
     localPaymentMethod,
+    deepLink,
     intervalId,
   });
 }
+
+/**
+ * Best-effort, fire-and-forget nudge to TOK2026's own immediate-confirm
+ * callable so a real SumUp payment is picked up within the ~4s local poll
+ * interval instead of waiting up to a minute on TOK2026's scheduled
+ * backstop. Never throws — a failure here just means this tick relies on
+ * the backstop instead, same as if this call didn't exist at all.
+ */
+async function triggerRemoteConfirmReal() {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    await fetch(POLL_BOOTH_CARD_PAYMENTS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { boothKey: BOOTH_KEY, eventId: EVENT_ID } }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+  } catch (err) {
+    // Network hiccup, TOK2026 function cold-start timeout, rate limit, etc.
+    // — never fatal, the 4s Firestore poll below and TOK2026's 1-minute
+    // backstop both still cover this order regardless.
+  }
+}
+
+// Test seam (see _setTriggerRemoteConfirmForTests below) — tests must never
+// make a real network call to TOK2026's Cloud Functions on every poll tick.
+let triggerRemoteConfirm = triggerRemoteConfirmReal;
 
 async function pollOnce(sessionId) {
   const entry = activePolls.get(sessionId);
@@ -294,6 +349,18 @@ async function pollOnce(sessionId) {
   if (!db) {
     stopPoll(sessionId);
     return;
+  }
+
+  // Only card/SumUp orders can ever have a matching SumUp transaction —
+  // nudging TOK2026 for a cash order would be a wasted call every tick.
+  if (entry.localPaymentMethod === 'sumup') {
+    await triggerRemoteConfirm();
+    // Re-check once more: the confirm call above may have taken a couple of
+    // seconds, during which the visitor could have left this session.
+    if (!isPollStillLive(sessionId)) {
+      stopPoll(sessionId);
+      return;
+    }
   }
 
   let snap;
@@ -340,11 +407,34 @@ async function onStateChange(prevState, nextState) {
 }
 
 /**
+ * Returns the SumUp deep-link URL for the session's current active order,
+ * or null if there is no active order (bridge disabled, not yet created, or
+ * the session has moved past PAYMENT). Called from server/routes.js's
+ * GET /api/tok-payment-link, which control.js hits right before opening the
+ * SumUp app so the deep link's foreign-tx-id always matches a real,
+ * already-written expOrders doc.
+ */
+function getDeepLink(sessionId) {
+  const entry = activePolls.get(sessionId);
+  return entry ? entry.deepLink : null;
+}
+
+/**
  * Test-only seam: trigger a single poll tick synchronously instead of
  * waiting on the real 4-second setInterval.
  */
 function _pollOnceForTests(sessionId) {
   return pollOnce(sessionId);
+}
+
+/**
+ * Test-only seam: replace the real network call to TOK2026's
+ * pollBoothCardPaymentsNow with a fake (e.g. a spy or a no-op), so tests
+ * never hit the network on every poll tick. Pass null to restore the real
+ * implementation.
+ */
+function _setTriggerRemoteConfirmForTests(fn) {
+  triggerRemoteConfirm = fn || triggerRemoteConfirmReal;
 }
 
 /**
@@ -362,8 +452,10 @@ module.exports = {
   isEnabled,
   init,
   onStateChange,
+  getDeepLink,
   _setDbForTests,
   _pollOnceForTests,
   _stopAllPollsForTests,
+  _setTriggerRemoteConfirmForTests,
   CREDENTIALS_PATH,
 };

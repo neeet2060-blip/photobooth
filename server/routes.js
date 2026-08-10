@@ -12,6 +12,7 @@ const { getLanIp } = require('./ip');
 const printqueue = require('./printqueue');
 const { PRINTER_NAME_REGEX, PRINT_MEDIA_REGEX } = require('./printer');
 const cloud = require('./cloud');
+const tokPayment = require('./tokPayment');
 
 const TOKEN_REGEX = /^[a-f0-9]{24}$/;
 
@@ -633,6 +634,23 @@ function registerRoutes(app, deps) {
 
   app.get('/api/lan-info', (req, res) => {
     res.json({ ok: true, ip: getLanIp(), port });
+  });
+
+  // Fetched by control.js right before opening the SumUp app, so the
+  // deep link's foreign-tx-id always matches a real, already-written
+  // TOK2026 expOrders doc (see server/tokPayment.js). Scoped to the
+  // caller's own sessionId matching the live session — a stale/foreign
+  // sessionId (session already moved on, or never had this bridge active)
+  // just gets deepLink: null rather than an error, since "not ready yet"
+  // is a normal, expected state here (e.g. bridge not configured this event).
+  app.get('/api/tok-payment-link', (req, res) => {
+    const { sessionId } = req.query;
+    const state = getState();
+    if (typeof sessionId !== 'string' || sessionId !== state.sessionId) {
+      res.json({ ok: true, deepLink: null });
+      return;
+    }
+    res.json({ ok: true, deepLink: tokPayment.getDeepLink(sessionId) });
   });
 
   // ---- Role pages: serve each role's index.html directly on the bare path ----

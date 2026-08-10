@@ -486,6 +486,51 @@ function renderQuantity(state) {
   ]);
 }
 
+// Real SumUp auto-confirmation (2026-08-11, TOK2026 integration): when the
+// chosen method is 'sumup', clicking confirm must NOT immediately dispatch
+// confirmPrintPayment (that would advance to capture before any money has
+// actually moved) — instead it opens the SumUp app via a deep link, and the
+// server's background tokPayment.js poll (already running since PAYMENT
+// entry) dispatches confirmPrintPayment itself once TOK2026 confirms a real
+// matching transaction. 'cash' is unchanged: staff clicking confirm there
+// still means "I already collected cash", so it dispatches immediately.
+async function handlePaymentConfirm(state) {
+  if (state.paymentMethod !== 'sumup') {
+    sendAction('confirmPrintPayment');
+    return;
+  }
+  let deepLink = null;
+  try {
+    const res = await fetch(`/api/tok-payment-link?sessionId=${encodeURIComponent(state.sessionId)}`);
+    const data = await res.json();
+    deepLink = data && data.deepLink;
+  } catch (err) {
+    // Network hiccup — fall through to the no-bridge fallback below.
+  }
+  if (!deepLink) {
+    // TOK2026 bridge not configured/enabled this event: no auto-confirm is
+    // possible, so fall back to the original staff-confirms-manually flow
+    // rather than leaving the visitor stuck on this screen forever.
+    sendAction('confirmPrintPayment');
+    return;
+  }
+  // Mirrors TOK2026's own openSumUpDeepLinkOrAlert idiom (src/lib/session.js):
+  // there's no reliable way to know upfront whether the SumUp app is
+  // installed on this device, so detect it via the page being backgrounded
+  // (the OS switching to the SumUp app) — if that hasn't happened shortly
+  // after navigating, the deep link silently failed and staff needs to know
+  // rather than see this screen sit there with no explanation.
+  let appOpened = false;
+  const markOpened = () => { appOpened = true; };
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) markOpened();
+  }, { once: true });
+  setTimeout(() => {
+    if (!appOpened) alert(t('paymentSumupAppMissingMsg'));
+  }, 1500);
+  window.location.href = deepLink;
+}
+
 function renderPayment(state) {
   const printOrder = state.printOrder;
   const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
@@ -531,7 +576,7 @@ function renderPayment(state) {
         {
           class: 'primary big-button',
           disabled: state.paymentMethod ? null : 'disabled',
-          onclick: () => sendAction('confirmPrintPayment'),
+          onclick: () => handlePaymentConfirm(state),
         },
         t('paymentConfirmButton'),
       ),

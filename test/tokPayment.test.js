@@ -8,7 +8,14 @@ const { PHASES } = require('../server/state');
 function freshTokPayment() {
   delete require.cache[require.resolve('../server/tokPayment')];
   // eslint-disable-next-line global-require
-  return require('../server/tokPayment');
+  const tokPayment = require('../server/tokPayment');
+  // Every poll tick for a card/sumup order now fires a best-effort network
+  // call to TOK2026's pollBoothCardPaymentsNow (see server/tokPayment.js) —
+  // tests must never actually hit the network, so this is disabled by
+  // default here. Tests that specifically want to assert it's called
+  // override it again after this via _setTriggerRemoteConfirmForTests.
+  tokPayment._setTriggerRemoteConfirmForTests(async () => {});
+  return tokPayment;
 }
 
 /**
@@ -29,14 +36,20 @@ function makeFakeDb() {
         docs.set(docId, { ...data });
         return { id: docId };
       },
+      // Real Firestore's collection.doc() with no argument pre-generates a
+      // random ID before any write happens — tokPayment.js relies on this
+      // (see startOrderForSession) to build the SumUp deep link's
+      // foreign-tx-id from the order's own doc ID synchronously.
       doc(docId) {
+        const id = docId || `doc${(counter += 1)}`;
         return {
+          id,
           async get() {
-            const data = docs.get(docId);
+            const data = docs.get(id);
             return { exists: Boolean(data), data: () => data };
           },
           async set(patch) {
-            docs.set(docId, { ...(docs.get(docId) || {}), ...patch });
+            docs.set(id, { ...(docs.get(id) || {}), ...patch });
           },
         };
       },
@@ -325,6 +338,63 @@ test('a quantity-0 order with no configured QR variant falls back to a 0-price p
   const doc = fakeDb.getDoc(docId);
   assert.deepEqual(doc.items, [{ itemId: 'photobooth_qr', name: 'QR 다운로드', qty: 1, price: 0 }]);
   assert.equal(doc.total, 0);
+
+  tokPayment._stopAllPollsForTests();
+});
+
+// ---- Real SumUp auto-confirmation (2026-08-11) ----
+
+test('getDeepLink returns a sumupmerchant:// deep link whose foreign-tx-id matches the order doc ID', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, paymentMethod: null });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.onStateChange(
+    { phase: PHASES.QUANTITY, printOrder: { quantity: 2 }, sessionId: 's1' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, sessionId: 's1', paymentMethod: null },
+  );
+
+  const [docId] = fakeDb.docIds();
+  const deepLink = tokPayment.getDeepLink('s1');
+
+  assert.ok(deepLink.startsWith('sumupmerchant://pay/1.0?'));
+  assert.ok(deepLink.includes(`foreign-tx-id=${docId}`));
+  assert.ok(deepLink.includes('currency=EUR'));
+
+  tokPayment._stopAllPollsForTests();
+});
+
+test('getDeepLink returns null once the session has moved past PAYMENT (no active order)', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  tokPayment._setDbForTests(makeFakeDb().db);
+
+  assert.equal(tokPayment.getDeepLink('never-had-a-session'), null);
+});
+
+test('a poll tick nudges TOK2026s immediate-confirm callable for a card/sumup order', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  let callCount = 0;
+  tokPayment._setTriggerRemoteConfirmForTests(async () => { callCount += 1; });
+
+  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: null });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.onStateChange(
+    { phase: PHASES.QUANTITY, printOrder: { quantity: 1 }, sessionId: 's1' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, sessionId: 's1', paymentMethod: null },
+  );
+
+  await tokPayment._pollOnceForTests('s1');
+  assert.equal(callCount, 1);
 
   tokPayment._stopAllPollsForTests();
 });
