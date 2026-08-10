@@ -27,6 +27,9 @@ function getOrCreateCerts() {
   const attrs = [{ name: 'commonName', value: lanIp }];
   const altNames = [
     { type: 2, value: 'localhost' }, // DNS
+    // photobooth.local (mDNS/Bonjour, 2026-08-10) — lets LAN devices use a
+    // name that survives DHCP re-assigning the IP, instead of re-typing it.
+    { type: 2, value: 'photobooth.local' }, // DNS
     { type: 7, ip: '127.0.0.1' }, // IP
     { type: 7, ip: lanIp }, // IP
   ];
