@@ -13,6 +13,7 @@ const { getLanIp } = require('./ip');
 const { registerRoutes, sweepExpiredTokens } = require('./routes');
 const stateMachine = require('./state');
 const printqueue = require('./printqueue');
+const tokPayment = require('./tokPayment');
 
 const HTTPS_PORT = Number(process.env.PORT) || 3000;
 const HTTP_PORT = Number(process.env.HTTP_PORT) || 3001;
@@ -35,9 +36,11 @@ function getContext() {
 }
 
 function dispatch(action) {
+  const prevState = sessionState;
   const { state: nextState, effects } = stateMachine.applyAction(sessionState, action, getContext());
   sessionState = nextState;
   broadcastState();
+  tokPayment.onStateChange(prevState, sessionState).catch(() => {});
   for (const effect of effects) {
     runEffect(effect);
   }
@@ -116,6 +119,8 @@ function deleteSessionPhotos(sessionId) {
 function broadcastState() {
   io.emit('state', sessionState);
 }
+
+tokPayment.init({ dispatch, getState });
 
 // ---- Express app ----
 
