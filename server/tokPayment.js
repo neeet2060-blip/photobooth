@@ -208,14 +208,20 @@ async function startOrderForSession(nextState) {
   const remotePaymentMethod = nextState.paymentMethod === 'cash' ? 'cash' : 'card';
   const localPaymentMethod = mapToLocalPaymentMethod(remotePaymentMethod);
   const { quantity } = nextState.printOrder;
+  // quantity 0 means "QR only, no physical print" (2026-08-10 QR payment
+  // gate, server/state.js). There's still exactly one QR being purchased,
+  // so the stored line item's qty must be 1 — using quantity(0) directly
+  // would price the whole order at 0 regardless of the QR's real price.
+  // The admin tags the QR menu variant with printQty:0 to match it here.
+  const isQrOnly = quantity === 0;
+  const orderQty = isQrOnly ? 1 : quantity;
 
   const match = await findPrintMenuVariant(db, quantity);
   const price = match ? Number(match.variant.price) || 0 : 0;
-  const itemId = match ? match.item.id : `photobooth_print_${quantity}`;
+  const fallbackName = isQrOnly ? 'QR 다운로드' : `인쇄 ${quantity}장`;
+  const itemId = match ? match.item.id : (isQrOnly ? 'photobooth_qr' : `photobooth_print_${quantity}`);
   const variantId = match ? match.variant.id : undefined;
-  const name = match
-    ? `${match.item.name || '인생네컷'} - ${match.variant.name || `인쇄 ${quantity}장`}`
-    : `인쇄 ${quantity}장`;
+  const name = match ? `${match.item.name || '인생네컷'} - ${match.variant.name || fallbackName}` : fallbackName;
   if (!match) {
     warnOnce(`no expMenus/${BOOTH_KEY} variant with printQty=${quantity} found — order will be created with price 0 until an admin configures it.`);
   }
@@ -228,11 +234,11 @@ async function startOrderForSession(nextState) {
     paymentStatus: 'unpaid',
     source: 'photobooth',
     sessionId: nextState.sessionId,
-    total: price * quantity,
+    total: price * orderQty,
     items: [{
       itemId,
       name,
-      qty: quantity,
+      qty: orderQty,
       price,
       ...(variantId ? { variantId } : {}),
     }],

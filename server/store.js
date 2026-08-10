@@ -29,6 +29,12 @@ const DEFAULT_SETTINGS = {
   printingEnabled: true,
   printUnitPriceCents: 300,
   maxPrintQuantity: 10,
+  // Gates QR delivery itself behind payment, independent of printingEnabled
+  // (2026-08-10, TOK2026 photobooth integration — server/tokPayment.js).
+  // Defaults OFF: existing/other events must opt in explicitly rather than
+  // silently start requiring payment for a QR code that used to be free.
+  qrRequiresPayment: false,
+  qrUnitPriceCents: 300,
   printMode: 'folder',
   printerName: '',
   printMedia: '4x6',

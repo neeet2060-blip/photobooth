@@ -274,6 +274,61 @@ test('onStateChange uses the real exp1 menu price when a matching printQty varia
   tokPayment._stopAllPollsForTests();
 });
 
+// ---- QR-only orders (2026-08-10 QR payment gate, printOrder.quantity 0) ----
+
+test('a quantity-0 (QR-only) printOrder is stored with qty:1 and the real QR price, not price*0', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  // Admin tags the QR variant with printQty:0 to match a QR-only session.
+  await fakeDb.db.collection('events').doc('test-event').collection('expMenus').doc('exp1').set({
+    items: [{
+      id: 'exp1_123', name: '인생네컷', price: 0, photo: null,
+      variants: [{ id: 'v_qr', name: 'QR 다운로드', price: 3, photo: null, printQty: 0 }],
+    }],
+  });
+
+  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, paymentMethod: null });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.onStateChange(
+    { phase: PHASES.QUANTITY, printOrder: { quantity: 0 }, sessionId: 's1' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, sessionId: 's1', paymentMethod: null },
+  );
+
+  const orderDocIds = fakeDb.docIds().filter((id) => id !== 'exp1');
+  assert.equal(orderDocIds.length, 1);
+  const doc = fakeDb.getDoc(orderDocIds[0]);
+  assert.deepEqual(doc.items, [{ itemId: 'exp1_123', name: '인생네컷 - QR 다운로드', qty: 1, price: 3, variantId: 'v_qr' }]);
+  assert.equal(doc.total, 3);
+
+  tokPayment._stopAllPollsForTests();
+});
+
+test('a quantity-0 order with no configured QR variant falls back to a 0-price placeholder (never quantity*price)', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, paymentMethod: null });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.onStateChange(
+    { phase: PHASES.QUANTITY, printOrder: { quantity: 0 }, sessionId: 's1' },
+    { phase: PHASES.PAYMENT, printOrder: { quantity: 0 }, sessionId: 's1', paymentMethod: null },
+  );
+
+  const [docId] = fakeDb.docIds();
+  const doc = fakeDb.getDoc(docId);
+  assert.deepEqual(doc.items, [{ itemId: 'photobooth_qr', name: 'QR 다운로드', qty: 1, price: 0 }]);
+  assert.equal(doc.total, 0);
+
+  tokPayment._stopAllPollsForTests();
+});
+
 after(() => {
   delete process.env.TOK2026_FIREBASE_CREDENTIALS;
   delete process.env.TOK2026_EVENT_ID;

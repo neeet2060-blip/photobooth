@@ -9,7 +9,7 @@ let lastState = null;
 let framesCache = [];
 let filtersCache = [];
 let countdownValue = null;
-let framesFetchedForTheme = false;
+let framesFetchedForSession = false;
 // Print pricing isn't pushed over the socket state broadcast, so we fetch it
 // once from the (unauthenticated, LAN-only) admin settings endpoint — the
 // same one the admin UI reads — purely to show a total in the print-order
@@ -82,9 +82,11 @@ function render(state) {
     return;
   }
 
-  // Reset the one-shot frame fetch flag whenever we are not in the theme phase,
-  // so the next entry into theme re-fetches the latest frames exactly once.
-  if (state.phase !== 'theme') framesFetchedForTheme = false;
+  // Reset the one-shot frame fetch flag whenever we are outside format/theme,
+  // so the next entry re-fetches the latest frames exactly once. Both phases
+  // read from the same framesCache (format needs it to know which layouts
+  // exist; theme needs it to show the frame cards for the chosen layout).
+  if (state.phase !== 'format' && state.phase !== 'theme') framesFetchedForSession = false;
 
   switch (state.phase) {
     case 'idle':
@@ -93,15 +95,28 @@ function render(state) {
     case 'consent':
       root.appendChild(renderConsent());
       break;
-    case 'theme':
-      root.appendChild(renderTheme());
-      // Fetch frames only once per theme-phase entry — re-fetching on every
-      // render caused an infinite fetch→render loop that constantly rebuilt the
-      // DOM and made frame cards impossible to tap.
-      if (!framesFetchedForTheme) {
-        framesFetchedForTheme = true;
+    case 'format':
+      root.appendChild(renderFormat(state));
+      if (!framesFetchedForSession) {
+        framesFetchedForSession = true;
         refreshFrames().then(() => render(lastState));
       }
+      break;
+    case 'theme':
+      root.appendChild(renderTheme(state));
+      // Fetch frames only once per format/theme entry — re-fetching on every
+      // render caused an infinite fetch→render loop that constantly rebuilt the
+      // DOM and made frame cards impossible to tap.
+      if (!framesFetchedForSession) {
+        framesFetchedForSession = true;
+        refreshFrames().then(() => render(lastState));
+      }
+      break;
+    case 'quantity':
+      root.appendChild(renderQuantity(state));
+      break;
+    case 'payment':
+      root.appendChild(renderPayment(state));
       break;
     case 'capture':
       root.appendChild(renderCapture(state));
@@ -139,9 +154,27 @@ function renderConsent() {
   ]);
 }
 
-function renderTheme() {
+const FORMAT_LABEL_KEYS = { strip: 'formatOptionStrip', grid: 'formatOptionGrid' };
+
+function renderFormat() {
+  const layouts = [...new Set(framesCache.filter((f) => f.active).map((f) => f.layout))];
   const grid = el('div', { class: 'frame-grid' });
-  for (const frame of framesCache) {
+  for (const layoutId of layouts) {
+    const sample = framesCache.find((f) => f.active && f.layout === layoutId);
+    const label = FORMAT_LABEL_KEYS[layoutId] ? t(FORMAT_LABEL_KEYS[layoutId]) : layoutId;
+    grid.appendChild(
+      el('div', { class: 'frame-card', onclick: () => sendAction('chooseFormat', { layoutId }) }, [
+        sample ? el('img', { src: sample.file, alt: label }) : null,
+        el('div', {}, label),
+      ]),
+    );
+  }
+  return el('div', { class: 'screen' }, [el('h1', {}, t('formatTitle')), grid]);
+}
+
+function renderTheme(state) {
+  const grid = el('div', { class: 'frame-grid' });
+  for (const frame of framesCache.filter((f) => f.layout === state.layoutId)) {
     grid.appendChild(
       el('div', { class: 'frame-card', onclick: () => sendAction('chooseTheme', { frameId: frame.id }) }, [
         el('img', { src: frame.file, alt: frame.name }),
@@ -328,85 +361,112 @@ const MIN_PRINT_QUANTITY = 1;
 const FALLBACK_MAX_PRINT_QUANTITY = 10;
 
 function renderQr(state) {
-  // No physical printer at this event → hide the paid print-order flow
-  // entirely rather than letting a visitor pay for a print nobody can
-  // deliver. Controlled by admin settings (default on) so a future event
-  // with a printer can turn it back on without a code change.
-  const printingEnabled = !printSettingsCache || printSettingsCache.printingEnabled !== false;
+  // Payment (if any) already happened up front, before capture — see
+  // state.js/renderQuantity/renderPayment. Nothing print-related left to do
+  // here; the print job itself auto-enqueues once print.jpg is saved.
   const children = [
     el('h1', {}, t('qrTitle')),
     el('p', {}, t('qrSubtitle')),
     el('div', { class: 'qr-box' }, [el('img', { src: state.qrDataUrl, alt: 'QR' })]),
-    printingEnabled ? renderPrintOrderSection(state) : null,
-    // "처음으로" always works regardless of print-order sub-state — restart's
-    // guard in state.js only checks phase === qr, unaffected by printOrder.
     el('button', { class: 'primary big-button', onclick: () => sendAction('restart') }, t('restartButton')),
   ];
   return el('div', { class: 'screen' }, children);
 }
 
-function renderPrintOrderSection(state) {
+function formatEuros(cents) {
+  return `€${(cents / 100).toFixed(2)}`;
+}
+
+function renderQuantity(state) {
   const printOrder = state.printOrder;
+  const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
   const maxQuantity = (printSettingsCache && printSettingsCache.maxPrintQuantity) || FALLBACK_MAX_PRINT_QUANTITY;
-
-  if (!printOrder) {
-    return el('div', { class: 'print-order-box' }, [
-      el('button', { onclick: () => sendAction('openPrintOrder') }, t('qrPrintOrderButton')),
-    ]);
-  }
-
-  if (printOrder.stage === 'quantity') {
-    const quantity = printOrder.quantity;
-    return el('div', { class: 'print-order-box' }, [
-      el('div', {}, t('qrPrintQuantityLabel')),
-      el('div', { style: 'display:flex;align-items:center;gap:12px;justify-content:center;' }, [
-        el(
-          'button',
-          {
-            disabled: quantity <= MIN_PRINT_QUANTITY ? 'disabled' : null,
-            onclick: () => sendAction('setPrintQuantity', { quantity: quantity - 1 }),
-          },
-          '-',
-        ),
-        el('div', {}, t('qrPrintQuantityOf', { quantity })),
-        el(
-          'button',
-          {
-            disabled: quantity >= maxQuantity ? 'disabled' : null,
-            onclick: () => sendAction('setPrintQuantity', { quantity: quantity + 1 }),
-          },
-          '+',
-        ),
-      ]),
-      el('div', { style: 'display:flex;gap:12px;justify-content:center;' }, [
-        el('button', { onclick: () => sendAction('cancelPrintOrder') }, t('qrPrintCancelButton')),
-        el(
-          'button',
-          { class: 'primary', onclick: () => sendAction('confirmPrintQuantity') },
-          t('qrPrintConfirmQuantityButton'),
-        ),
-      ]),
-    ]);
-  }
-
-  // stage === 'awaiting_payment'
+  const unitPriceCents = (printSettingsCache && printSettingsCache.printUnitPriceCents) || 0;
   const totalLabel = printSettingsCache
-    ? t('qrPrintTotal', { total: `€${((printOrder.quantity * printSettingsCache.printUnitPriceCents) / 100).toFixed(2)}` })
-    : t('qrPrintQuantityOf', { quantity: printOrder.quantity });
+    ? t('quantityTotal', { total: formatEuros(quantity * unitPriceCents) })
+    : t('quantityOf', { quantity });
 
-  return el('div', { class: 'print-order-box' }, [
+  return el('div', { class: 'screen' }, [
+    el('h1', {}, t('quantityTitle')),
+    el('div', { style: 'display:flex;align-items:center;gap:16px;justify-content:center;' }, [
+      el(
+        'button',
+        {
+          disabled: quantity <= MIN_PRINT_QUANTITY ? 'disabled' : null,
+          onclick: () => sendAction('setPrintQuantity', { quantity: quantity - 1 }),
+        },
+        '-',
+      ),
+      el('div', {}, t('quantityOf', { quantity })),
+      el(
+        'button',
+        {
+          disabled: quantity >= maxQuantity ? 'disabled' : null,
+          onclick: () => sendAction('setPrintQuantity', { quantity: quantity + 1 }),
+        },
+        '+',
+      ),
+    ]),
+    el('div', { class: 'progress-text' }, totalLabel),
+    el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
+      el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
+      el(
+        'button',
+        { class: 'primary big-button', onclick: () => sendAction('confirmPrintQuantity') },
+        t('quantityConfirmButton'),
+      ),
+    ]),
+  ]);
+}
+
+function renderPayment(state) {
+  const printOrder = state.printOrder;
+  const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
+  const unitPriceCents = (printSettingsCache && printSettingsCache.printUnitPriceCents) || 0;
+  const totalLabel = printSettingsCache
+    ? t('paymentTotalLabel', { total: formatEuros(quantity * unitPriceCents) })
+    : t('quantityOf', { quantity });
+
+  const methodBtn = (method, label) =>
+    el(
+      'button',
+      {
+        class: state.paymentMethod === method ? 'primary' : null,
+        onclick: () => sendAction('choosePaymentMethod', { method }),
+      },
+      label,
+    );
+
+  const children = [
+    el('h1', {}, t('paymentTitle')),
     el('div', {}, totalLabel),
-    el('div', {}, t('qrPrintAwaitingPayment')),
-    el('div', { style: 'display:flex;gap:12px;justify-content:center;' }, [
-      el('button', { onclick: () => sendAction('cancelPrintOrder') }, t('qrPrintCancelButton')),
+    el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
+      methodBtn('sumup', t('paymentMethodSumup')),
+      methodBtn('cash', t('paymentMethodCash')),
+    ]),
+  ];
+
+  if (state.paymentMethod) {
+    children.push(el('div', {}, t('paymentAwaiting')));
+  }
+
+  children.push(
+    el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
+      el('button', { onclick: () => sendAction('backToQuantity') }, t('paymentBackButton')),
       // Staff-operated: this booth screen sits with staff at this step, same
       // as the rest of the flow (no separate staff-vs-customer surface exists
       // elsewhere in control.js either).
       el(
         'button',
-        { class: 'primary', onclick: () => sendAction('confirmPrintPayment') },
-        t('qrPrintConfirmPaymentButton'),
+        {
+          class: 'primary big-button',
+          disabled: state.paymentMethod ? null : 'disabled',
+          onclick: () => sendAction('confirmPrintPayment'),
+        },
+        t('paymentConfirmButton'),
       ),
     ]),
-  ]);
+  );
+
+  return el('div', { class: 'screen' }, children);
 }

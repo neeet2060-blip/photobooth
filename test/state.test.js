@@ -51,10 +51,10 @@ test('start: rejected when not idle', () => {
   assert.equal(state.error, 'invalid_action');
 });
 
-test('agree: consent -> theme', () => {
+test('agree: consent -> format', () => {
   const consent = run(createInitialState(), 'start').state;
   const { state } = run(consent, 'agree');
-  assert.equal(state.phase, PHASES.THEME);
+  assert.equal(state.phase, PHASES.FORMAT);
 });
 
 test('agree: rejected outside consent', () => {
@@ -76,9 +76,14 @@ test('cancel: rejected outside consent/theme', () => {
   assert.equal(state.error, 'invalid_action');
 });
 
-function toTheme() {
+function toFormat() {
   const consent = run(createInitialState(), 'start').state;
   return run(consent, 'agree').state;
+}
+
+function toTheme() {
+  const format = toFormat();
+  return run(format, 'chooseFormat', { layoutId: 'strip' }).state;
 }
 
 test('chooseTheme: rejects unknown/inactive frame', () => {
@@ -165,6 +170,7 @@ test('finishEarly: requires at least 4 photos', () => {
   const bigCtx = { settings: { ...SETTINGS, shotsTotal: 12 }, frames: FRAMES };
   let manual = run(createInitialState(), 'start', undefined).state;
   manual = applyAction(manual, { type: 'agree' }, bigCtx).state;
+  manual = applyAction(manual, { type: 'chooseFormat', payload: { layoutId: 'strip' } }, bigCtx).state;
   manual = applyAction(manual, { type: 'chooseTheme', payload: { frameId: 'frame-a' } }, bigCtx).state;
   for (let i = 0; i < 4; i += 1) {
     manual = applyAction(manual, { type: 'photoRecorded', payload: { index: i, file: `/${i}.jpg` } }, bigCtx).state;
@@ -302,8 +308,6 @@ test('unknown action type sets an error and leaves state otherwise unchanged', (
   assert.equal(state.phase, PHASES.IDLE);
 });
 
-// ---- Print-order actions ----
-
 function toQr() {
   const state = toFilter();
   return run(state, 'finalSaved', {
@@ -313,144 +317,208 @@ function toQr() {
   }).state;
 }
 
-test('createInitialState includes printOrder: null', () => {
+test('createInitialState includes printOrder/paymentMethod/confirmedPrintOrder: null', () => {
   const state = createInitialState();
   assert.equal(state.printOrder, null);
+  assert.equal(state.paymentMethod, null);
+  assert.equal(state.confirmedPrintOrder, null);
 });
 
-test('openPrintOrder: qr -> printOrder quantity stage, defaults to quantity 1', () => {
-  const qr = toQr();
-  const { state } = run(qr, 'openPrintOrder');
-  assert.deepEqual(state.printOrder, { stage: 'quantity', quantity: 1 });
-  assert.equal(state.phase, PHASES.QR);
+// ---- Format (layout) selection ----
+
+test('chooseFormat: valid layoutId -> theme, sets layoutId', () => {
+  const format = toFormat();
+  const { state } = run(format, 'chooseFormat', { layoutId: 'strip' });
+  assert.equal(state.phase, PHASES.THEME);
+  assert.equal(state.layoutId, 'strip');
 });
 
-test('openPrintOrder: rejected outside qr phase', () => {
-  const state = toFilter();
-  const { state: next } = run(state, 'openPrintOrder');
-  assert.equal(next.error, 'invalid_action');
+test('chooseFormat: rejects a layoutId with no matching active frame', () => {
+  const format = toFormat();
+  const { state } = run(format, 'chooseFormat', { layoutId: 'poster' });
+  assert.equal(state.error, 'invalid_layout');
+  assert.equal(state.phase, PHASES.FORMAT);
 });
 
-test('openPrintOrder: rejected when a print order is already open', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const { state } = run(opened, 'openPrintOrder');
+test('chooseFormat: rejected outside format phase', () => {
+  const { state } = run(createInitialState(), 'chooseFormat', { layoutId: 'strip' });
   assert.equal(state.error, 'invalid_action');
 });
 
-test('setPrintQuantity: rejected outside qr phase', () => {
-  const state = toFilter();
+// ---- Theme filtered by chosen format ----
+
+test('chooseTheme: rejects a frame whose layout does not match the chosen format', () => {
+  const framesWithGrid = [
+    ...FRAMES,
+    { id: 'frame-c', name: 'C', layout: 'grid', file: '/c.svg', active: true, order: 2 },
+  ];
+  const customCtx = { settings: SETTINGS, frames: framesWithGrid };
+  let state = applyAction(createInitialState(), { type: 'start' }, customCtx).state;
+  state = applyAction(state, { type: 'agree' }, customCtx).state;
+  state = applyAction(state, { type: 'chooseFormat', payload: { layoutId: 'strip' } }, customCtx).state;
+  const { state: next } = applyAction(state, { type: 'chooseTheme', payload: { frameId: 'frame-c' } }, customCtx);
+  assert.equal(next.error, 'invalid_frame');
+});
+
+test('chooseTheme: printingEnabled false skips straight to capture (no quantity/payment)', () => {
+  const theme = toTheme();
+  const { state } = run(theme, 'chooseTheme', { frameId: 'frame-a' });
+  assert.equal(state.phase, PHASES.CAPTURE);
+  assert.equal(state.printOrder, null);
+});
+
+// ---- Quantity + payment phases (printingEnabled: true) ----
+
+const PRINTING_SETTINGS = { ...SETTINGS, printingEnabled: true };
+
+function printingCtx() {
+  return { settings: PRINTING_SETTINGS, frames: FRAMES };
+}
+
+function toQuantity() {
+  const theme = toTheme();
+  return applyAction(theme, { type: 'chooseTheme', payload: { frameId: 'frame-a' } }, printingCtx()).state;
+}
+
+function toPayment() {
+  return run(toQuantity(), 'confirmPrintQuantity').state;
+}
+
+test('chooseTheme: printingEnabled true -> quantity phase, defaults printOrder quantity to 1', () => {
+  const state = toQuantity();
+  assert.equal(state.phase, PHASES.QUANTITY);
+  assert.deepEqual(state.printOrder, { quantity: 1 });
+});
+
+test('setPrintQuantity: rejected outside quantity phase', () => {
+  const state = toTheme();
   const { state: next } = run(state, 'setPrintQuantity', { quantity: 2 });
   assert.equal(next.error, 'invalid_action');
 });
 
-test('setPrintQuantity: rejected when not in quantity sub-stage', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const confirmed = run(opened, 'confirmPrintQuantity').state;
-  const { state } = run(confirmed, 'setPrintQuantity', { quantity: 3 });
-  assert.equal(state.error, 'invalid_action');
-});
-
 test('setPrintQuantity: rejects 0 and max+1, accepts bounds 1 and maxPrintQuantity', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
+  const quantity = toQuantity();
 
-  const zero = run(opened, 'setPrintQuantity', { quantity: 0 }).state;
+  const zero = run(quantity, 'setPrintQuantity', { quantity: 0 }).state;
   assert.equal(zero.error, 'invalid_quantity');
 
-  const overMax = run(opened, 'setPrintQuantity', { quantity: SETTINGS.maxPrintQuantity + 1 }).state;
+  const overMax = run(quantity, 'setPrintQuantity', { quantity: SETTINGS.maxPrintQuantity + 1 }).state;
   assert.equal(overMax.error, 'invalid_quantity');
 
-  const atMin = run(opened, 'setPrintQuantity', { quantity: 1 }).state;
+  const atMin = run(quantity, 'setPrintQuantity', { quantity: 1 }).state;
   assert.equal(atMin.printOrder.quantity, 1);
 
-  const atMax = run(opened, 'setPrintQuantity', { quantity: SETTINGS.maxPrintQuantity }).state;
+  const atMax = run(quantity, 'setPrintQuantity', { quantity: SETTINGS.maxPrintQuantity }).state;
   assert.equal(atMax.printOrder.quantity, SETTINGS.maxPrintQuantity);
 });
 
 test('setPrintQuantity: rejects non-integer quantity', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const { state } = run(opened, 'setPrintQuantity', { quantity: 2.5 });
+  const quantity = toQuantity();
+  const { state } = run(quantity, 'setPrintQuantity', { quantity: 2.5 });
   assert.equal(state.error, 'invalid_quantity');
 });
 
-test('confirmPrintQuantity: rejected outside quantity sub-stage', () => {
-  const qr = toQr();
-  const { state } = run(qr, 'confirmPrintQuantity');
+test('confirmPrintQuantity: rejected outside quantity phase', () => {
+  const theme = toTheme();
+  const { state } = run(theme, 'confirmPrintQuantity');
   assert.equal(state.error, 'invalid_action');
 });
 
-test('confirmPrintQuantity: quantity -> awaiting_payment, keeps quantity', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const withQty = run(opened, 'setPrintQuantity', { quantity: 3 }).state;
+test('confirmPrintQuantity: quantity -> payment, keeps printOrder', () => {
+  const withQty = run(toQuantity(), 'setPrintQuantity', { quantity: 3 }).state;
   const { state } = run(withQty, 'confirmPrintQuantity');
-  assert.deepEqual(state.printOrder, { stage: 'awaiting_payment', quantity: 3 });
+  assert.equal(state.phase, PHASES.PAYMENT);
+  assert.deepEqual(state.printOrder, { quantity: 3 });
 });
 
-test('cancelPrintOrder: clears printOrder from the quantity sub-stage', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const { state } = run(opened, 'cancelPrintOrder');
-  assert.equal(state.printOrder, null);
-  assert.equal(state.phase, PHASES.QR);
+test('backToQuantity: payment -> quantity, clears paymentMethod', () => {
+  const payment = toPayment();
+  const withMethod = run(payment, 'choosePaymentMethod', { method: 'cash' }).state;
+  const { state } = run(withMethod, 'backToQuantity');
+  assert.equal(state.phase, PHASES.QUANTITY);
+  assert.equal(state.paymentMethod, null);
 });
 
-test('cancelPrintOrder: clears printOrder from the awaiting_payment sub-stage', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const confirmed = run(opened, 'confirmPrintQuantity').state;
-  const { state } = run(confirmed, 'cancelPrintOrder');
-  assert.equal(state.printOrder, null);
-});
-
-test('cancelPrintOrder: rejected when no print order is open', () => {
-  const qr = toQr();
-  const { state } = run(qr, 'cancelPrintOrder');
+test('backToQuantity: rejected outside payment phase', () => {
+  const quantity = toQuantity();
+  const { state } = run(quantity, 'backToQuantity');
   assert.equal(state.error, 'invalid_action');
 });
 
-test('confirmPrintPayment: rejected outside awaiting_payment sub-stage', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const { state } = run(opened, 'confirmPrintPayment');
+test('choosePaymentMethod: rejects unknown method', () => {
+  const payment = toPayment();
+  const { state } = run(payment, 'choosePaymentMethod', { method: 'bitcoin' });
+  assert.equal(state.error, 'invalid_payment_method');
+});
+
+test('choosePaymentMethod: accepts sumup and cash', () => {
+  const payment = toPayment();
+  const sumup = run(payment, 'choosePaymentMethod', { method: 'sumup' }).state;
+  assert.equal(sumup.paymentMethod, 'sumup');
+  const cash = run(payment, 'choosePaymentMethod', { method: 'cash' }).state;
+  assert.equal(cash.paymentMethod, 'cash');
+});
+
+test('choosePaymentMethod: rejected outside payment phase', () => {
+  const quantity = toQuantity();
+  const { state } = run(quantity, 'choosePaymentMethod', { method: 'cash' });
   assert.equal(state.error, 'invalid_action');
 });
 
-test('confirmPrintPayment: full happy path, correct effect payload and totalCents, clears printOrder', () => {
-  const qr = toQr();
-  let state = run(qr, 'openPrintOrder').state;
-  state = run(state, 'setPrintQuantity', { quantity: 3 }).state;
+test('confirmPrintPayment: rejected without a chosen payment method', () => {
+  const payment = toPayment();
+  const { state } = run(payment, 'confirmPrintPayment');
+  assert.equal(state.error, 'invalid_action');
+});
+
+test('confirmPrintPayment: rejected outside payment phase', () => {
+  const quantity = toQuantity();
+  const { state } = run(quantity, 'confirmPrintPayment');
+  assert.equal(state.error, 'invalid_action');
+});
+
+test('confirmPrintPayment: payment -> capture (not qr), sets confirmedPrintOrder, clears printOrder/paymentMethod', () => {
+  let state = run(toQuantity(), 'setPrintQuantity', { quantity: 3 }).state;
   state = run(state, 'confirmPrintQuantity').state;
-  const customCtx = { settings: { ...SETTINGS, printUnitPriceCents: 300 }, frames: FRAMES };
-  const { state: next, effects } = applyAction(state, { type: 'confirmPrintPayment' }, customCtx);
+  state = run(state, 'choosePaymentMethod', { method: 'sumup' }).state;
+  const { state: next, effects } = run(state, 'confirmPrintPayment');
 
+  assert.equal(next.phase, PHASES.CAPTURE);
   assert.equal(next.printOrder, null);
-  assert.equal(next.phase, PHASES.QR);
+  assert.equal(next.paymentMethod, null);
+  assert.deepEqual(next.confirmedPrintOrder, {
+    quantity: 3,
+    unitPriceCents: SETTINGS.printUnitPriceCents,
+    totalCents: 900,
+    method: 'sumup',
+  });
+  // No print-order-confirmed effect yet — that's deferred to 'printSheetReady'.
+  assert.ok(!effects.some((e) => e.type === 'print-order-confirmed'));
+});
+
+// ---- printSheetReady ----
+
+function toConfirmedPayment() {
+  const payment = toPayment();
+  const withMethod = run(payment, 'choosePaymentMethod', { method: 'sumup' }).state;
+  return run(withMethod, 'confirmPrintPayment').state;
+}
+
+test('printSheetReady: no-op when confirmedPrintOrder is null', () => {
+  const capture = toCapture(); // regular (non-printing) flow, confirmedPrintOrder stays null
+  const { state, effects } = run(capture, 'printSheetReady');
+  assert.deepEqual(state, capture);
+  assert.deepEqual(effects, []);
+});
+
+test('printSheetReady: pushes print-order-confirmed effect and clears confirmedPrintOrder', () => {
+  const confirmed = toConfirmedPayment();
+  const { state, effects } = run(confirmed, 'printSheetReady');
+  assert.equal(state.confirmedPrintOrder, null);
   const effect = effects.find((e) => e.type === 'print-order-confirmed');
   assert.ok(effect);
-  assert.equal(effect.sessionId, state.sessionId);
-  assert.equal(effect.quantity, 3);
-  assert.equal(effect.unitPriceCents, 300);
-  assert.equal(effect.totalCents, 900);
-});
-
-test('restart: also clears printOrder', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const withQty = run(opened, 'setPrintQuantity', { quantity: 5 }).state;
-  const { state } = run(withQty, 'restart');
-  assert.equal(state.phase, PHASES.IDLE);
-  assert.equal(state.printOrder, null);
-});
-
-test('forceReset: also clears printOrder', () => {
-  const qr = toQr();
-  const opened = run(qr, 'openPrintOrder').state;
-  const { state, effects } = run(opened, 'forceReset');
-  assert.equal(state.phase, PHASES.IDLE);
-  assert.equal(state.printOrder, null);
-  assert.ok(effects.some((e) => e.type === 'session-abandoned'));
+  assert.equal(effect.sessionId, confirmed.sessionId);
+  assert.equal(effect.quantity, 1);
+  assert.equal(effect.unitPriceCents, SETTINGS.printUnitPriceCents);
+  assert.equal(effect.totalCents, SETTINGS.printUnitPriceCents);
 });

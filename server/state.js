@@ -11,12 +11,29 @@
  *
  * `context` carries things the reducer needs but that are not part of
  * persisted state: settings (shotsTotal etc.) and frames list.
+ *
+ * Visitor flow: idle -> consent -> format (strip/grid) -> theme (frame
+ * design, filtered by the chosen format) -> [quantity -> payment, when
+ * settings.printingEnabled OR settings.qrRequiresPayment] -> capture ->
+ * select -> filter -> qr. Payment (if any) happens up front, before a
+ * single photo is taken, and is remembered as `confirmedPrintOrder` until
+ * the print-ready sheet actually exists on disk (see 'printSheetReady').
+ * When only qrRequiresPayment is on (no printer this event), printOrder
+ * starts at quantity 0 ("QR only") — paying still sets `qrPaid`, but never
+ * queues a `confirmedPrintOrder` (see 'confirmPrintPayment'). Every path
+ * into 'capture' when qrRequiresPayment is on passes through
+ * 'confirmPrintPayment' first, which is what actually sets `qrPaid: true`
+ * — callers that release the QR (see finalSaved/'qr' phase) rely on that
+ * structural guarantee rather than re-checking `qrPaid` themselves.
  */
 
 const PHASES = Object.freeze({
   IDLE: 'idle',
   CONSENT: 'consent',
+  FORMAT: 'format',
   THEME: 'theme',
+  QUANTITY: 'quantity',
+  PAYMENT: 'payment',
   CAPTURE: 'capture',
   SELECT: 'select',
   FILTER: 'filter',
@@ -30,6 +47,9 @@ const MAX_RETAKE_SHOTS_OVER_TOTAL = 8; // allow up to shotsTotal + this many ext
 // DEFAULT_SETTINGS is the source of truth in the running app.
 const DEFAULT_MAX_PRINT_QUANTITY = 10;
 const DEFAULT_PRINT_UNIT_PRICE_CENTS = 300;
+const DEFAULT_QR_PRICE_CENTS = 300; // fallback only; settings.qrUnitPriceCents is the real source
+
+const PAYMENT_METHODS = Object.freeze(['sumup', 'cash']);
 
 const FILTERS = Object.freeze([
   { id: 'none', label: 'No Filter', css: 'none' },
@@ -50,6 +70,7 @@ function createInitialState() {
     sessionId: null,
     createdAt: null,
     updatedAt: Date.now(),
+    layoutId: null, // 'strip' | 'grid', chosen in the format phase
     frameId: null,
     photos: [], // [{ index, file, takenAt }]
     shotsTaken: 0,
@@ -61,7 +82,15 @@ function createInitialState() {
     finalToken: null,
     qrDataUrl: null,
     error: null,
-    printOrder: null, // { stage: 'quantity' | 'awaiting_payment', quantity: number } | null
+    printOrder: null, // { quantity: number } | null — only during quantity/payment phases. quantity 0 means "QR only, no physical print" (only reachable when settings.qrRequiresPayment is on).
+    paymentMethod: null, // 'sumup' | 'cash' | null — chosen during the payment phase
+    // Set once payment is confirmed (before capture starts); consumed by
+    // 'printSheetReady' once the print.jpg sheet actually exists on disk.
+    confirmedPrintOrder: null, // { quantity, unitPriceCents, totalCents, method } | null
+    // Set true by 'confirmPrintPayment' (2026-08-10, TOK2026 integration).
+    // When settings.qrRequiresPayment is on, QR delivery must not happen
+    // until this is true.
+    qrPaid: false,
   };
 }
 
@@ -75,6 +104,10 @@ function withError(state, message) {
 
 function isValidFrame(frames, frameId) {
   return frames.some((f) => f.id === frameId && f.active);
+}
+
+function isValidLayout(frames, layoutId) {
+  return frames.some((f) => f.active && f.layout === layoutId);
 }
 
 /**
@@ -107,15 +140,26 @@ function applyAction(state, action, context) {
       if (state.phase !== PHASES.CONSENT) {
         return { state: withError(state, 'invalid_action'), effects };
       }
-      return { state: touch({ ...state, phase: PHASES.THEME }), effects };
+      return { state: touch({ ...state, phase: PHASES.FORMAT }), effects };
     }
 
     case 'cancel': {
-      if (![PHASES.CONSENT, PHASES.THEME].includes(state.phase)) {
+      if (![PHASES.CONSENT, PHASES.FORMAT, PHASES.THEME, PHASES.QUANTITY, PHASES.PAYMENT].includes(state.phase)) {
         return { state: withError(state, 'invalid_action'), effects };
       }
       effects.push({ type: 'session-abandoned', sessionId: state.sessionId });
       return { state: touch(createInitialState()), effects };
+    }
+
+    case 'chooseFormat': {
+      if (state.phase !== PHASES.FORMAT) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const { layoutId } = payload;
+      if (!layoutId || !isValidLayout(frames, layoutId)) {
+        return { state: withError(state, 'invalid_layout'), effects };
+      }
+      return { state: touch({ ...state, phase: PHASES.THEME, layoutId }), effects };
     }
 
     case 'chooseTheme': {
@@ -123,19 +167,107 @@ function applyAction(state, action, context) {
         return { state: withError(state, 'invalid_action'), effects };
       }
       const { frameId } = payload;
-      if (!frameId || !isValidFrame(frames, frameId)) {
+      const frame = frames.find((f) => f.id === frameId && f.active);
+      if (!frame || frame.layout !== state.layoutId) {
         return { state: withError(state, 'invalid_frame'), effects };
       }
       const shotsTotal = state.shotsTotal || settings.shotsTotal;
       // If the operator already had enough shots (e.g. came here via
       // changeTheme after finishing capture), skip straight back to
-      // selecting rather than forcing more photos.
-      const nextPhase = state.shotsTaken >= shotsTotal ? PHASES.SELECT : PHASES.CAPTURE;
+      // selecting — payment (if any) already happened earlier in this
+      // same session. Otherwise, a paid event routes through quantity ->
+      // payment first; an unpaid one (no printer this event) goes
+      // straight to capture, same as before this feature existed.
+      let nextPhase;
+      let printOrder = state.printOrder;
+      if (state.shotsTaken >= shotsTotal) {
+        nextPhase = PHASES.SELECT;
+      } else if (settings.printingEnabled || settings.qrRequiresPayment) {
+        // qrRequiresPayment alone (printingEnabled off) still needs a
+        // payment step for the QR itself — printOrder.quantity starts at 0
+        // in that case (see createInitialState's printOrder comment).
+        nextPhase = PHASES.QUANTITY;
+        printOrder = { quantity: settings.printingEnabled ? 1 : 0 };
+      } else {
+        nextPhase = PHASES.CAPTURE;
+      }
       const next = touch({
         ...state,
         phase: nextPhase,
         frameId,
         shotsTotal,
+        printOrder,
+      });
+      return { state: next, effects };
+    }
+
+    case 'setPrintQuantity': {
+      if (state.phase !== PHASES.QUANTITY || !state.printOrder) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const { quantity } = payload;
+      const maxPrintQuantity = settings.maxPrintQuantity ?? DEFAULT_MAX_PRINT_QUANTITY;
+      // 0 is only a valid choice when QR itself is a paid item — otherwise
+      // "0 prints" would mean paying for literally nothing.
+      const minQuantity = settings.qrRequiresPayment ? 0 : 1;
+      if (!Number.isInteger(quantity) || quantity < minQuantity || quantity > maxPrintQuantity) {
+        return { state: withError(state, 'invalid_quantity'), effects };
+      }
+      const next = touch({ ...state, printOrder: { ...state.printOrder, quantity } });
+      return { state: next, effects };
+    }
+
+    case 'confirmPrintQuantity': {
+      if (state.phase !== PHASES.QUANTITY || !state.printOrder) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      return { state: touch({ ...state, phase: PHASES.PAYMENT }), effects };
+    }
+
+    case 'backToQuantity': {
+      if (state.phase !== PHASES.PAYMENT) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      return { state: touch({ ...state, phase: PHASES.QUANTITY, paymentMethod: null }), effects };
+    }
+
+    case 'choosePaymentMethod': {
+      if (state.phase !== PHASES.PAYMENT) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const { method } = payload;
+      if (!PAYMENT_METHODS.includes(method)) {
+        return { state: withError(state, 'invalid_payment_method'), effects };
+      }
+      return { state: touch({ ...state, paymentMethod: method }), effects };
+    }
+
+    case 'confirmPrintPayment': {
+      if (state.phase !== PHASES.PAYMENT || !state.printOrder || !state.paymentMethod) {
+        return { state: withError(state, 'invalid_action'), effects };
+      }
+      const { quantity } = state.printOrder;
+      const unitPriceCents = settings.printUnitPriceCents ?? DEFAULT_PRINT_UNIT_PRICE_CENTS;
+      const qrUnitPriceCents = settings.qrUnitPriceCents ?? DEFAULT_QR_PRICE_CENTS;
+      // quantity 0 means "QR only" (see printOrder comment in
+      // createInitialState) — its price is qrUnitPriceCents, not
+      // quantity * unitPriceCents (which would be 0 and undercharge).
+      const totalCents = quantity > 0
+        ? quantity * unitPriceCents + (settings.qrRequiresPayment ? qrUnitPriceCents : 0)
+        : qrUnitPriceCents;
+      // Deferred: the print.jpg sheet doesn't exist yet (capture hasn't
+      // happened), so the actual print-queue effect fires later, from
+      // 'printSheetReady', once the file is really on disk. A quantity-0
+      // (QR-only) order never queues a print job at all.
+      const next = touch({
+        ...state,
+        phase: PHASES.CAPTURE,
+        printOrder: null,
+        paymentMethod: null,
+        qrPaid: true,
+        confirmedPrintOrder: quantity > 0
+          ? { quantity, unitPriceCents, totalCents, method: state.paymentMethod }
+          : null,
       });
       return { state: next, effects };
     }
@@ -286,52 +418,15 @@ function applyAction(state, action, context) {
       return { state: next, effects };
     }
 
-    case 'openPrintOrder': {
-      if (state.phase !== PHASES.QR) {
-        return { state: withError(state, 'invalid_action'), effects };
+    case 'printSheetReady': {
+      // Internal action dispatched by the /api/print-sheet route once
+      // print.jpg is actually saved to disk. Not phase-gated: by the time
+      // this fires the session has already moved on to filter/qr. A no-op
+      // when this session never had a confirmed (paid) print order.
+      if (!state.confirmedPrintOrder) {
+        return { state, effects };
       }
-      if (state.printOrder !== null) {
-        return { state: withError(state, 'invalid_action'), effects };
-      }
-      const next = touch({ ...state, printOrder: { stage: 'quantity', quantity: 1 } });
-      return { state: next, effects };
-    }
-
-    case 'setPrintQuantity': {
-      if (state.phase !== PHASES.QR || !state.printOrder || state.printOrder.stage !== 'quantity') {
-        return { state: withError(state, 'invalid_action'), effects };
-      }
-      const { quantity } = payload;
-      const maxPrintQuantity = settings.maxPrintQuantity ?? DEFAULT_MAX_PRINT_QUANTITY;
-      if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxPrintQuantity) {
-        return { state: withError(state, 'invalid_quantity'), effects };
-      }
-      const next = touch({ ...state, printOrder: { ...state.printOrder, quantity } });
-      return { state: next, effects };
-    }
-
-    case 'confirmPrintQuantity': {
-      if (state.phase !== PHASES.QR || !state.printOrder || state.printOrder.stage !== 'quantity') {
-        return { state: withError(state, 'invalid_action'), effects };
-      }
-      const next = touch({ ...state, printOrder: { ...state.printOrder, stage: 'awaiting_payment' } });
-      return { state: next, effects };
-    }
-
-    case 'cancelPrintOrder': {
-      if (state.phase !== PHASES.QR || state.printOrder === null) {
-        return { state: withError(state, 'invalid_action'), effects };
-      }
-      return { state: touch({ ...state, printOrder: null }), effects };
-    }
-
-    case 'confirmPrintPayment': {
-      if (state.phase !== PHASES.QR || !state.printOrder || state.printOrder.stage !== 'awaiting_payment') {
-        return { state: withError(state, 'invalid_action'), effects };
-      }
-      const { quantity } = state.printOrder;
-      const unitPriceCents = settings.printUnitPriceCents ?? DEFAULT_PRINT_UNIT_PRICE_CENTS;
-      const totalCents = quantity * unitPriceCents;
+      const { quantity, unitPriceCents, totalCents } = state.confirmedPrintOrder;
       effects.push({
         type: 'print-order-confirmed',
         sessionId: state.sessionId,
@@ -339,8 +434,7 @@ function applyAction(state, action, context) {
         unitPriceCents,
         totalCents,
       });
-      const next = touch({ ...state, printOrder: null });
-      return { state: next, effects };
+      return { state: touch({ ...state, confirmedPrintOrder: null }), effects };
     }
 
     case 'restart': {
@@ -366,6 +460,7 @@ function applyAction(state, action, context) {
 module.exports = {
   PHASES,
   FILTERS,
+  PAYMENT_METHODS,
   PICKS_REQUIRED,
   MIN_PHOTOS_FOR_EARLY_FINISH,
   createInitialState,

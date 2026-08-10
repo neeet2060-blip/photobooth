@@ -264,12 +264,22 @@ function registerRoutes(app, deps) {
     if (!req.file) {
       return res.status(400).json({ ok: false, error: 'missing_file' });
     }
-    if (state.phase !== PHASES.FILTER) {
-      return res.status(409).json({ ok: false, error: 'not_in_filter_phase' });
+    // The client fires this upload right after /api/final succeeds — and
+    // /api/final's handler has ALREADY dispatched 'finalSaved' (filter -> qr)
+    // by the time its response reaches the client, so by the time this
+    // request arrives the session is normally already in qr, not filter.
+    // Accept both: sessionId below is the real safety check.
+    if (![PHASES.FILTER, PHASES.QR].includes(state.phase)) {
+      return res.status(409).json({ ok: false, error: 'not_in_filter_or_qr_phase' });
     }
     if (sessionId !== state.sessionId) {
       return res.status(409).json({ ok: false, error: 'session_mismatch' });
     }
+
+    // Now that print.jpg actually exists on disk, let a pre-paid session
+    // (payment happened up front, before capture — see state.js) enqueue
+    // its print job. No-op if this session never had a confirmed order.
+    dispatch({ type: 'printSheetReady' });
 
     return res.json({ ok: true });
   });
