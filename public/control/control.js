@@ -377,13 +377,25 @@ function formatEuros(cents) {
   return `€${(cents / 100).toFixed(2)}`;
 }
 
+function totalCentsFor(quantity, printSettings) {
+  // quantity 0 means "QR only, no physical print" (2026-08-10 QR payment
+  // gate) — its price is qrUnitPriceCents alone, never quantity*unitPrice
+  // (which would be 0). Mirrors server/state.js's confirmPrintPayment.
+  const unitPriceCents = (printSettings && printSettings.printUnitPriceCents) || 0;
+  const qrUnitPriceCents = (printSettings && printSettings.qrUnitPriceCents) || 0;
+  const qrRequiresPayment = Boolean(printSettings && printSettings.qrRequiresPayment);
+  if (quantity > 0) return quantity * unitPriceCents + (qrRequiresPayment ? qrUnitPriceCents : 0);
+  return qrUnitPriceCents;
+}
+
 function renderQuantity(state) {
   const printOrder = state.printOrder;
   const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
   const maxQuantity = (printSettingsCache && printSettingsCache.maxPrintQuantity) || FALLBACK_MAX_PRINT_QUANTITY;
-  const unitPriceCents = (printSettingsCache && printSettingsCache.printUnitPriceCents) || 0;
+  // 0장(QR만)은 qrRequiresPayment가 켜져 있을 때만 선택 가능 — 그 외엔 기존처럼 최소 1장.
+  const minQuantity = (printSettingsCache && printSettingsCache.qrRequiresPayment) ? 0 : MIN_PRINT_QUANTITY;
   const totalLabel = printSettingsCache
-    ? t('quantityTotal', { total: formatEuros(quantity * unitPriceCents) })
+    ? t('quantityTotal', { total: formatEuros(totalCentsFor(quantity, printSettingsCache)) })
     : t('quantityOf', { quantity });
 
   return el('div', { class: 'screen' }, [
@@ -392,12 +404,12 @@ function renderQuantity(state) {
       el(
         'button',
         {
-          disabled: quantity <= MIN_PRINT_QUANTITY ? 'disabled' : null,
+          disabled: quantity <= minQuantity ? 'disabled' : null,
           onclick: () => sendAction('setPrintQuantity', { quantity: quantity - 1 }),
         },
         '-',
       ),
-      el('div', {}, t('quantityOf', { quantity })),
+      el('div', {}, quantity === 0 ? t('quantityQrOnly') : t('quantityOf', { quantity })),
       el(
         'button',
         {
@@ -422,9 +434,8 @@ function renderQuantity(state) {
 function renderPayment(state) {
   const printOrder = state.printOrder;
   const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
-  const unitPriceCents = (printSettingsCache && printSettingsCache.printUnitPriceCents) || 0;
   const totalLabel = printSettingsCache
-    ? t('paymentTotalLabel', { total: formatEuros(quantity * unitPriceCents) })
+    ? t('paymentTotalLabel', { total: formatEuros(totalCentsFor(quantity, printSettingsCache)) })
     : t('quantityOf', { quantity });
 
   const methodBtn = (method, label) =>

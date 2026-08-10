@@ -17,6 +17,8 @@ const DICT = {
     themeTitle: '프레임을 선택하세요',
     quantityTitle: '인화 매수를 선택하세요',
     quantityOf: '{quantity}장',
+    // QR 결제게이트(2026-08-10) — qrRequiresPayment 켜져 있을 때 수량 0(QR만, 인쇄 안 함) 표시.
+    quantityQrOnly: 'QR만 (인쇄 안 함)',
     quantityTotal: '총액: {total}',
     quantityConfirmButton: '결제 진행',
     paymentTitle: '결제 방법을 선택하세요',
