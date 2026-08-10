@@ -458,6 +458,19 @@ function registerRoutes(app, deps) {
       }
       next.maxPrintQuantity = num;
     }
+    if (body.qrRequiresPayment !== undefined) {
+      if (typeof body.qrRequiresPayment !== 'boolean') {
+        return res.status(400).json({ ok: false, error: 'invalid_qrRequiresPayment' });
+      }
+      next.qrRequiresPayment = body.qrRequiresPayment;
+    }
+    if (body.qrUnitPriceCents !== undefined) {
+      const num = Number(body.qrUnitPriceCents);
+      if (!Number.isInteger(num) || num < 0 || num > 100000) {
+        return res.status(400).json({ ok: false, error: 'invalid_qrUnitPriceCents' });
+      }
+      next.qrUnitPriceCents = num;
+    }
     if (body.printMode !== undefined) {
       if (body.printMode !== 'folder' && body.printMode !== 'cups') {
         return res.status(400).json({ ok: false, error: 'invalid_printMode' });

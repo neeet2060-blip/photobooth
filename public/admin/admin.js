@@ -272,6 +272,8 @@ const PRINT_SETTINGS_FIELDS = [
   { key: 'printMode', label: '인쇄 모드', type: 'select', options: ['folder', 'cups'] },
   { key: 'printerName', label: '프린터 이름 (cups 모드)', type: 'text' },
   { key: 'printMedia', label: '용지 크기', type: 'text' },
+  { key: 'qrRequiresPayment', label: 'QR 다운로드 결제 필요 (켜면 결제 전엔 QR 화면이 막힘)', type: 'checkbox' },
+  { key: 'qrUnitPriceCents', label: 'QR 다운로드 단가 (EUR)', type: 'price' },
 ];
 
 async function loadPrintSettings() {
