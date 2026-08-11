@@ -212,6 +212,10 @@ function renderCapture(state) {
     children.push(el('button', { onclick: () => sendAction('finishEarly') }, t('finishEarlyButton')));
   }
 
+  // 촬영 중에도 처음 화면으로 돌아갈 수 있어야 함(2026-08-11 사용자 요청) — state.js의 'cancel'이
+  // 이미 CAPTURE 단계까지 허용하도록 확장됨; 세션 abandon 처리(사진 삭제)까지 기존 로직 그대로 재사용.
+  children.push(el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')));
+
   if (state.countdown !== null || countdownValue !== null) {
     const value = state.countdown !== null ? state.countdown : countdownValue;
     children.push(el('div', { class: 'countdown-overlay' }, String(value)));

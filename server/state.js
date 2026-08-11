@@ -144,7 +144,7 @@ function applyAction(state, action, context) {
     }
 
     case 'cancel': {
-      if (![PHASES.CONSENT, PHASES.FORMAT, PHASES.THEME, PHASES.QUANTITY, PHASES.PAYMENT].includes(state.phase)) {
+      if (![PHASES.CONSENT, PHASES.FORMAT, PHASES.THEME, PHASES.QUANTITY, PHASES.PAYMENT, PHASES.CAPTURE].includes(state.phase)) {
         return { state: withError(state, 'invalid_action'), effects };
       }
       effects.push({ type: 'session-abandoned', sessionId: state.sessionId });

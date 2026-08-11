@@ -76,6 +76,14 @@ test('cancel: rejected outside consent/theme', () => {
   assert.equal(state.error, 'invalid_action');
 });
 
+test('cancel: capture -> idle, with session-abandoned effect (2026-08-11, back button while shooting)', () => {
+  const capture = toCapture();
+  const { state, effects } = run(capture, 'cancel');
+  assert.equal(state.phase, PHASES.IDLE);
+  assert.equal(state.sessionId, null);
+  assert.ok(effects.some((e) => e.type === 'session-abandoned'));
+});
+
 function toFormat() {
   const consent = run(createInitialState(), 'start').state;
   return run(consent, 'agree').state;
