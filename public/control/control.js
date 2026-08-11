@@ -154,7 +154,10 @@ function renderConsent() {
   ]);
 }
 
-const FORMAT_LABEL_KEYS = { strip: 'formatOptionStrip', grid: 'formatOptionGrid' };
+const FORMAT_LABEL_KEYS = {
+  strip: 'formatOptionStrip', grid: 'formatOptionGrid',
+  grid2a: 'formatOptionGrid2a', grid2b: 'formatOptionGrid2b',
+};
 
 function renderFormat() {
   const layouts = [...new Set(framesCache.filter((f) => f.active).map((f) => f.layout))];
