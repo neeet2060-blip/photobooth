@@ -214,7 +214,21 @@ function renderCapture(state) {
 
   // 촬영 중에도 처음 화면으로 돌아갈 수 있어야 함(2026-08-11 사용자 요청) — state.js의 'cancel'이
   // 이미 CAPTURE 단계까지 허용하도록 확장됨; 세션 abandon 처리(사진 삭제)까지 기존 로직 그대로 재사용.
-  children.push(el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')));
+  // 이미 결제가 끝난 세션(confirmedPrintOrder 또는 qrPaid)이면 취소가 곧 "받은 돈을 그냥 버림"이므로
+  // (환불 로직이 따로 없음), 실수로 누르는 걸 막기 위해 한 번 더 확인한다.
+  children.push(
+    el(
+      'button',
+      {
+        onclick: () => {
+          const alreadyPaid = Boolean(state.confirmedPrintOrder) || state.qrPaid === true;
+          if (alreadyPaid && !window.confirm(t('cancelPaidConfirmMsg'))) return;
+          sendAction('cancel');
+        },
+      },
+      t('cancelButton'),
+    ),
+  );
 
   if (state.countdown !== null || countdownValue !== null) {
     const value = state.countdown !== null ? state.countdown : countdownValue;
