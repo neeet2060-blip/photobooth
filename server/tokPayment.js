@@ -54,6 +54,24 @@ let _getState = null;
 
 // sessionId -> { docId, sessionId, remotePaymentMethod, localPaymentMethod, intervalId }
 const activePolls = new Map();
+// sessionId -> promise for the in-process setup currently deciding whether
+// that session needs to create or resume an order/poll. Both startup recovery
+// and live state changes use this so their async Firestore work cannot race.
+const sessionSetupOps = new Map();
+
+async function serializeSessionSetup(sessionId, work) {
+  const previous = sessionSetupOps.get(sessionId) || Promise.resolve();
+  // A failed earlier setup must not permanently block a later retry.
+  const current = previous.catch(() => {}).then(work);
+  sessionSetupOps.set(sessionId, current);
+  try {
+    return await current;
+  } finally {
+    if (sessionSetupOps.get(sessionId) === current) {
+      sessionSetupOps.delete(sessionId);
+    }
+  }
+}
 
 function warnOnce(message) {
   if (warnedOnce) return;
@@ -298,6 +316,52 @@ async function startOrderForSession(nextState) {
 }
 
 /**
+ * Restarts polling for a payment that was already mirrored to TOK2026 before
+ * this Node process restarted. The order ID is deliberately rediscovered by
+ * sessionId rather than persisted locally, keeping session.json independent
+ * from the remote Firestore document shape.
+ */
+async function resumePollForSession(sessionState) {
+  if (!sessionState || !sessionState.sessionId || !isEnabled()) return;
+  await serializeSessionSetup(sessionState.sessionId, async () => {
+    if (activePolls.has(sessionState.sessionId)) return;
+
+    const db = getDb();
+    if (!db) return;
+
+    let snap;
+    try {
+      // Do not filter paymentStatus here: an order can be paid while this
+      // process is down, and must be found then immediately advanced below.
+      snap = await expOrdersCollection(db)
+        .where('sessionId', '==', sessionState.sessionId)
+        .limit(1)
+        .get();
+    } catch (err) {
+      warnOnce(`failed to resume payment poll for session ${sessionState.sessionId}: ${(err && err.message) || err}`);
+      return;
+    }
+    if (!snap || snap.empty || !snap.docs || !snap.docs.length) return;
+
+    const doc = snap.docs[0];
+    const remotePaymentMethod = sessionState.paymentMethod === 'cash' ? 'cash' : 'card';
+    activePolls.set(sessionState.sessionId, {
+      docId: doc.id,
+      sessionId: sessionState.sessionId,
+      remotePaymentMethod,
+      localPaymentMethod: mapToLocalPaymentMethod(remotePaymentMethod),
+      intervalId: setInterval(() => {
+        pollOnce(sessionState.sessionId).catch(() => {});
+      }, POLL_INTERVAL_MS),
+    });
+
+    // Do not wait for the next interval: the remote order may have been marked
+    // paid while this server was down.
+    await pollOnce(sessionState.sessionId);
+  });
+}
+
+/**
  * A participant can switch between 'sumup' and 'cash' while still on the
  * payment screen (before either is actually confirmed) — this patches the
  * already-created order's paymentMethod in place instead of creating a
@@ -426,12 +490,14 @@ async function onStateChange(prevState, nextState) {
     && Boolean(nextState.paymentMethod);
   if (!ready) return;
 
-  const entry = activePolls.get(nextState.sessionId);
-  if (!entry) {
-    await startOrderForSession(nextState);
-  } else {
-    await syncOrderPaymentMethod(nextState, entry);
-  }
+  await serializeSessionSetup(nextState.sessionId, async () => {
+    const entry = activePolls.get(nextState.sessionId);
+    if (!entry) {
+      await startOrderForSession(nextState);
+    } else {
+      await syncOrderPaymentMethod(nextState, entry);
+    }
+  });
 }
 
 /**
@@ -467,6 +533,7 @@ module.exports = {
   isEnabled,
   init,
   onStateChange,
+  resumePollForSession,
   _setDbForTests,
   _pollOnceForTests,
   _stopAllPollsForTests,

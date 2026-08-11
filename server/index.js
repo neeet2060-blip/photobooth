@@ -25,7 +25,10 @@ store.ensureDirs();
 
 // ---- Global session state (single booth, single active session) ----
 
-let sessionState = stateMachine.createInitialState();
+const savedSession = store.readSession();
+let sessionState = savedSession
+  ? stateMachine.reconcileRestoredSession(savedSession)
+  : stateMachine.createInitialState();
 
 function getState() {
   return sessionState;
@@ -40,6 +43,7 @@ function dispatch(action) {
   const { state: nextState, effects } = stateMachine.applyAction(sessionState, action, getContext());
   sessionState = nextState;
   broadcastState();
+  store.writeSession(sessionState);
   tokPayment.onStateChange(prevState, sessionState).catch(() => {});
   for (const effect of effects) {
     runEffect(effect);
@@ -121,6 +125,13 @@ function broadcastState() {
 }
 
 tokPayment.init({ dispatch, getState });
+
+// A restarted process loses the in-memory polling interval. Restore it for
+// a pending payment so a staff confirmation that happened during downtime is
+// still observed and can advance the local session.
+if (sessionState.phase === stateMachine.PHASES.PAYMENT && sessionState.paymentMethod) {
+  tokPayment.resumePollForSession(sessionState).catch(() => {});
+}
 
 // ---- Express app ----
 

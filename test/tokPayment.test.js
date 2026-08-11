@@ -27,8 +27,28 @@ function freshTokPayment() {
 function makeFakeDb() {
   const docs = new Map(); // docId -> data
   let counter = 0;
+  let onQueryGet = null;
+  let queryGetCount = 0;
 
   function subCollection() {
+    const query = (filters = [], limitCount = null) => ({
+      where(field, operator, value) {
+        assert.equal(operator, '==');
+        return query([...filters, [field, value]], limitCount);
+      },
+      limit(count) {
+        return query(filters, count);
+      },
+      async get() {
+        queryGetCount += 1;
+        const matches = Array.from(docs.entries())
+          .filter(([, data]) => filters.every(([field, value]) => data[field] === value))
+          .slice(0, limitCount || undefined)
+          .map(([id, data]) => ({ id, data: () => data }));
+        if (onQueryGet) await onQueryGet();
+        return { empty: matches.length === 0, docs: matches };
+      },
+    });
     return {
       async add(data) {
         counter += 1;
@@ -53,6 +73,9 @@ function makeFakeDb() {
           },
         };
       },
+      where(field, operator, value) {
+        return query().where(field, operator, value);
+      },
     };
   }
 
@@ -74,7 +97,15 @@ function makeFakeDb() {
       if (entry) entry.paymentStatus = status;
     },
     docIds: () => Array.from(docs.keys()),
+    setOnQueryGet: (callback) => { onQueryGet = callback; },
+    queryGetCount: () => queryGetCount,
   };
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((res) => { resolve = res; });
+  return { promise, resolve };
 }
 
 function makeDispatchRecorder(initialState) {
@@ -122,6 +153,153 @@ test('isEnabled() is true once a db is injected for tests', () => {
   const { db } = makeFakeDb();
   tokPayment._setDbForTests(db);
   assert.equal(tokPayment.isEnabled(), true);
+  tokPayment._stopAllPollsForTests();
+});
+
+async function seedUnpaidOrder(fakeDb, sessionId, paymentMethod = 'cash') {
+  const tokPayment = freshTokPayment();
+  tokPayment._setDbForTests(fakeDb.db);
+  const recorder = makeDispatchRecorder({
+    sessionId,
+    phase: PHASES.PAYMENT,
+    printOrder: { quantity: 1 },
+    paymentMethod,
+  });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+  await tokPayment.onStateChange(
+    { sessionId, phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: null },
+    recorder.getState(),
+  );
+  tokPayment._stopAllPollsForTests();
+  return fakeDb.docIds()[0];
+}
+
+// ---- Restart recovery ----
+
+test('resumePollForSession rediscovers an unpaid order and resumes its poll', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const fakeDb = makeFakeDb();
+  const docId = await seedUnpaidOrder(fakeDb, 's-resume');
+
+  const tokPayment = freshTokPayment();
+  tokPayment._setDbForTests(fakeDb.db);
+  const recorder = makeDispatchRecorder({
+    sessionId: 's-resume', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: 'cash',
+  });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.resumePollForSession(recorder.getState());
+  assert.deepEqual(recorder.dispatched, []);
+
+  fakeDb.setPaymentStatus(docId, 'paid');
+  await tokPayment._pollOnceForTests('s-resume');
+  assert.deepEqual(recorder.dispatched.map((action) => action.type), ['confirmPrintPayment']);
+  tokPayment._stopAllPollsForTests();
+});
+
+test('resumePollForSession is a no-op when no unpaid remote order exists', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+  const recorder = makeDispatchRecorder({
+    sessionId: 's-missing', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: 'cash',
+  });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.resumePollForSession(recorder.getState());
+  await tokPayment._pollOnceForTests('s-missing');
+  assert.deepEqual(recorder.dispatched, []);
+  tokPayment._stopAllPollsForTests();
+});
+
+test('resumePollForSession immediately processes an order paid during restart recovery', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const fakeDb = makeFakeDb();
+  const docId = await seedUnpaidOrder(fakeDb, 's-immediate', 'sumup');
+  fakeDb.setOnQueryGet(() => {
+    fakeDb.setPaymentStatus(docId, 'paid');
+    fakeDb.setOnQueryGet(null);
+  });
+
+  const tokPayment = freshTokPayment();
+  tokPayment._setDbForTests(fakeDb.db);
+  const recorder = makeDispatchRecorder({
+    sessionId: 's-immediate', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: 'sumup',
+  });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.resumePollForSession(recorder.getState());
+  assert.deepEqual(recorder.dispatched.map((action) => action.type), [
+    'confirmPrintPayment',
+  ]);
+  tokPayment._stopAllPollsForTests();
+});
+
+test('resumePollForSession finds an order that was already paid before restart recovery', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const fakeDb = makeFakeDb();
+  const docId = await seedUnpaidOrder(fakeDb, 's-already-paid', 'cash');
+  fakeDb.setPaymentStatus(docId, 'paid');
+
+  const tokPayment = freshTokPayment();
+  tokPayment._setDbForTests(fakeDb.db);
+  const recorder = makeDispatchRecorder({
+    sessionId: 's-already-paid', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: 'cash',
+  });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  await tokPayment.resumePollForSession(recorder.getState());
+  assert.deepEqual(recorder.dispatched.map((action) => action.type), ['confirmPrintPayment']);
+  tokPayment._stopAllPollsForTests();
+});
+
+test('overlapping state changes reserve one session setup and create only one order', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+  const recorder = makeDispatchRecorder({
+    sessionId: 's-overlap-start', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: 'cash',
+  });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  const paymentState = recorder.getState();
+  await Promise.all([
+    tokPayment.onStateChange({ ...paymentState, paymentMethod: null }, paymentState),
+    tokPayment.onStateChange({ ...paymentState, paymentMethod: null }, paymentState),
+  ]);
+
+  assert.equal(fakeDb.docIds().length, 1);
+  tokPayment._stopAllPollsForTests();
+});
+
+test('overlapping restart recovery performs one query and installs one poll setup', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const fakeDb = makeFakeDb();
+  await seedUnpaidOrder(fakeDb, 's-overlap-resume');
+  const gate = deferred();
+  let firstQuery = true;
+  fakeDb.setOnQueryGet(async () => {
+    if (!firstQuery) return;
+    firstQuery = false;
+    await gate.promise;
+  });
+
+  const tokPayment = freshTokPayment();
+  tokPayment._setDbForTests(fakeDb.db);
+  const recorder = makeDispatchRecorder({
+    sessionId: 's-overlap-resume', phase: PHASES.PAYMENT, printOrder: { quantity: 1 }, paymentMethod: 'cash',
+  });
+  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+
+  const first = tokPayment.resumePollForSession(recorder.getState());
+  await Promise.resolve();
+  const second = tokPayment.resumePollForSession(recorder.getState());
+  gate.resolve();
+  await Promise.all([first, second]);
+
+  assert.equal(fakeDb.queryGetCount(), 1);
   tokPayment._stopAllPollsForTests();
 });
 

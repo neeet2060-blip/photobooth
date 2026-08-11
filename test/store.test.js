@@ -24,7 +24,7 @@ after(() => {
 
 beforeEach(() => {
   // Reset each JSON file between tests for isolation.
-  for (const file of ['settings.json', 'frames.json', 'stats.json', 'tokens.json', 'printjobs.json']) {
+  for (const file of ['settings.json', 'frames.json', 'stats.json', 'tokens.json', 'printjobs.json', 'session.json']) {
     const p = path.join(tmpDir, file);
     if (fs.existsSync(p)) fs.rmSync(p);
   }
@@ -132,4 +132,15 @@ test('readJsonFile recovers from a corrupt file by backing it up and returning d
   assert.equal(result.shotsTotal, store.DEFAULT_SETTINGS.shotsTotal);
   const backups = fs.readdirSync(tmpDir).filter((f) => f.startsWith('settings.json.corrupt-'));
   assert.equal(backups.length, 1);
+});
+
+test('readSession returns null without creating a file when no session was saved', () => {
+  assert.equal(store.readSession(), null);
+  assert.equal(fs.existsSync(store.SESSION_FILE), false);
+});
+
+test('writeSession persists a session that readSession restores', () => {
+  const session = { phase: 'payment', sessionId: 's-restore', paymentMethod: 'cash' };
+  assert.deepEqual(store.writeSession(session), session);
+  assert.deepEqual(store.readSession(), session);
 });

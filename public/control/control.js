@@ -560,12 +560,13 @@ function renderPayment(state) {
   const totalLabel = printSettingsCache
     ? t('paymentTotalLabel', { total: formatEuros(totalCentsFor(quantity, printSettingsCache)) })
     : t('quantityOf', { quantity });
-  // 이 세션이 시작된 시각(2026-08-11 사용자 요청) — TOK2026 결제 대시보드엔 여러 미결제건이 동시에
-  // 뜰 수 있어서, 직원이 "지금 이 손님" 주문을 시각으로 맞춰 찾은 뒤 그 화면의 SumUp 버튼으로
-  // 결제를 시도한다. state.createdAt은 'start' 액션에서 찍히므로 결제 화면 도달 시점보다는 약간
-  // 이르지만(포맷/테마 선택 시간만큼), 초 단위가 아닌 분 단위 매칭 목적이라 오차는 무시할 만하다.
-  const createdTimeLabel = state.createdAt
-    ? t('paymentCreatedAtLabel', { time: new Date(state.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
+  // 결제요청(카드/현금 버튼 클릭)을 누른 시각(2026-08-11 사용자 요청/수정) — TOK2026 결제
+  // 대시보드엔 여러 미결제건이 동시에 뜰 수 있어서, 직원이 "지금 이 손님" 주문을 시각으로 맞춰
+  // 찾은 뒤 그 화면의 SumUp 버튼으로 결제를 시도한다. paymentMethodChosenAt은 'choosePaymentMethod'
+  // 시점에 찍히는데, 이 시점이 곧 tokPayment.js가 TOK2026 주문을 만들거나 동기화하는 시점과
+  // 같아서(state.js 참고) 세션 시작 시각(createdAt)보다 훨씬 더 정확하게 대시보드 항목과 맞아떨어진다.
+  const createdTimeLabel = state.paymentMethodChosenAt
+    ? t('paymentCreatedAtLabel', { time: new Date(state.paymentMethodChosenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
     : null;
 
   const methodBtn = (method, label) =>

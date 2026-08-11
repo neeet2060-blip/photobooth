@@ -84,6 +84,13 @@ function createInitialState() {
     error: null,
     printOrder: null, // { quantity: number } | null — only during quantity/payment phases. quantity 0 means "QR only, no physical print" (only reachable when settings.qrRequiresPayment is on).
     paymentMethod: null, // 'sumup' | 'cash' | null — chosen during the payment phase
+    // Timestamp of the 'choosePaymentMethod' that set paymentMethod above
+    // (2026-08-11, TOK2026 integration) — this is also the moment
+    // tokPayment.js creates/syncs the TOK2026 order, so it's what staff use
+    // on the TOK2026 dashboard to match "this customer" by time. Cleared
+    // alongside paymentMethod (backToQuantity, confirmPrintPayment) — not
+    // the same as session-start time (createdAt), which is earlier.
+    paymentMethodChosenAt: null,
     // Set once payment is confirmed (before capture starts); consumed by
     // 'printSheetReady' once the print.jpg sheet actually exists on disk.
     confirmedPrintOrder: null, // { quantity, unitPriceCents, totalCents, method } | null
@@ -92,6 +99,30 @@ function createInitialState() {
     // until this is true.
     qrPaid: false,
   };
+}
+
+/**
+ * Makes a persisted session safe to resume after a Node restart. Most
+ * phases do not rely on in-process timers and can continue as they were.
+ * CAPTURE is the exception: any active countdown was lost with the process,
+ * so reset only that transient field while retaining already captured photos.
+ */
+function reconcileRestoredSession(savedSession) {
+  if (!savedSession || typeof savedSession !== 'object' || Array.isArray(savedSession)) {
+    return createInitialState();
+  }
+
+  if (!Object.values(PHASES).includes(savedSession.phase)) {
+    return createInitialState();
+  }
+
+  // Merge defaults to accommodate sessions saved by an earlier app version
+  // that lacks fields added later, without discarding valid visitor choices.
+  const restored = { ...createInitialState(), ...savedSession };
+  if (restored.phase === PHASES.CAPTURE) {
+    return { ...restored, countdown: null };
+  }
+  return restored;
 }
 
 function touch(state) {
@@ -228,7 +259,7 @@ function applyAction(state, action, context) {
       if (state.phase !== PHASES.PAYMENT) {
         return { state: withError(state, 'invalid_action'), effects };
       }
-      return { state: touch({ ...state, phase: PHASES.QUANTITY, paymentMethod: null }), effects };
+      return { state: touch({ ...state, phase: PHASES.QUANTITY, paymentMethod: null, paymentMethodChosenAt: null }), effects };
     }
 
     case 'choosePaymentMethod': {
@@ -239,7 +270,7 @@ function applyAction(state, action, context) {
       if (!PAYMENT_METHODS.includes(method)) {
         return { state: withError(state, 'invalid_payment_method'), effects };
       }
-      return { state: touch({ ...state, paymentMethod: method }), effects };
+      return { state: touch({ ...state, paymentMethod: method, paymentMethodChosenAt: Date.now() }), effects };
     }
 
     case 'confirmPrintPayment': {
@@ -264,6 +295,7 @@ function applyAction(state, action, context) {
         phase: PHASES.CAPTURE,
         printOrder: null,
         paymentMethod: null,
+        paymentMethodChosenAt: null,
         qrPaid: true,
         confirmedPrintOrder: quantity > 0
           ? { quantity, unitPriceCents, totalCents, method: state.paymentMethod }
@@ -464,6 +496,7 @@ module.exports = {
   PICKS_REQUIRED,
   MIN_PHOTOS_FOR_EARLY_FINISH,
   createInitialState,
+  reconcileRestoredSession,
   applyAction,
   genSessionId,
 };

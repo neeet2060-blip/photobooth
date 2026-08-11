@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { PHASES, createInitialState, applyAction } = require('../server/state');
+const { PHASES, createInitialState, reconcileRestoredSession, applyAction } = require('../server/state');
 
 const SETTINGS = {
   shotsTotal: 4,
@@ -35,6 +35,32 @@ test('createInitialState starts in idle phase with empty session', () => {
   assert.equal(state.sessionId, null);
   assert.deepEqual(state.photos, []);
   assert.deepEqual(state.picks, []);
+});
+
+test('reconcileRestoredSession keeps payment state intact', () => {
+  const saved = {
+    ...createInitialState(),
+    phase: PHASES.PAYMENT,
+    sessionId: 's-payment',
+    printOrder: { quantity: 2 },
+    paymentMethod: 'cash',
+  };
+  assert.deepEqual(reconcileRestoredSession(saved), saved);
+});
+
+test('reconcileRestoredSession clears only an interrupted capture countdown', () => {
+  const saved = {
+    ...createInitialState(),
+    phase: PHASES.CAPTURE,
+    sessionId: 's-capture',
+    countdown: 2,
+    photos: [{ index: 0, file: '0.jpg', takenAt: 123 }],
+    shotsTaken: 1,
+  };
+  const restored = reconcileRestoredSession(saved);
+  assert.equal(restored.countdown, null);
+  assert.deepEqual(restored.photos, saved.photos);
+  assert.equal(restored.shotsTaken, 1);
 });
 
 test('start: idle -> consent, assigns a sessionId', () => {
@@ -330,6 +356,7 @@ test('createInitialState includes printOrder/paymentMethod/confirmedPrintOrder: 
   assert.equal(state.printOrder, null);
   assert.equal(state.paymentMethod, null);
   assert.equal(state.confirmedPrintOrder, null);
+  assert.equal(state.paymentMethodChosenAt, null);
 });
 
 // ---- Format (layout) selection ----
@@ -445,6 +472,7 @@ test('backToQuantity: payment -> quantity, clears paymentMethod', () => {
   const { state } = run(withMethod, 'backToQuantity');
   assert.equal(state.phase, PHASES.QUANTITY);
   assert.equal(state.paymentMethod, null);
+  assert.equal(state.paymentMethodChosenAt, null);
 });
 
 test('backToQuantity: rejected outside payment phase', () => {
@@ -463,8 +491,10 @@ test('choosePaymentMethod: accepts sumup and cash', () => {
   const payment = toPayment();
   const sumup = run(payment, 'choosePaymentMethod', { method: 'sumup' }).state;
   assert.equal(sumup.paymentMethod, 'sumup');
+  assert.ok(typeof sumup.paymentMethodChosenAt === 'number');
   const cash = run(payment, 'choosePaymentMethod', { method: 'cash' }).state;
   assert.equal(cash.paymentMethod, 'cash');
+  assert.ok(typeof cash.paymentMethodChosenAt === 'number');
 });
 
 test('choosePaymentMethod: rejected outside payment phase', () => {
@@ -494,6 +524,7 @@ test('confirmPrintPayment: payment -> capture (not qr), sets confirmedPrintOrder
   assert.equal(next.phase, PHASES.CAPTURE);
   assert.equal(next.printOrder, null);
   assert.equal(next.paymentMethod, null);
+  assert.equal(next.paymentMethodChosenAt, null);
   assert.deepEqual(next.confirmedPrintOrder, {
     quantity: 3,
     unitPriceCents: SETTINGS.printUnitPriceCents,

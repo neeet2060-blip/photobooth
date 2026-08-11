@@ -14,6 +14,7 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const FRAMES_FILE = path.join(DATA_DIR, 'frames.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const PRINTJOBS_FILE = path.join(DATA_DIR, 'printjobs.json');
+const SESSION_FILE = path.join(DATA_DIR, 'session.json');
 
 const DEFAULT_SETTINGS = {
   shotsTotal: 8,
@@ -154,6 +155,31 @@ function writeStats(stats) {
   return stats;
 }
 
+// Unlike settings/stats, the absence of this file is meaningful: it means
+// there is no session to restore.  Do not use readJsonFile here because that
+// helper eagerly writes its fallback value when the file is absent.
+function readSession() {
+  ensureDirs();
+  if (!fs.existsSync(SESSION_FILE)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
+  } catch (err) {
+    // A corrupt session must not prevent the booth from starting. Keep a
+    // timestamped copy for diagnosis, but leave no synthetic empty session.
+    try {
+      fs.renameSync(SESSION_FILE, `${SESSION_FILE}.corrupt-${Date.now()}`);
+    } catch (_) {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+function writeSession(sessionState) {
+  writeJsonFile(SESSION_FILE, sessionState);
+  return sessionState;
+}
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -204,6 +230,7 @@ module.exports = {
   FRAMES_DIR,
   PRINT_OUTBOX_DIR,
   PRINTJOBS_FILE,
+  SESSION_FILE,
   DEFAULT_SETTINGS,
   DEFAULT_STATS,
   ensureDirs,
@@ -215,6 +242,8 @@ module.exports = {
   writeFrames,
   readStats,
   writeStats,
+  readSession,
+  writeSession,
   recordSessionStarted,
   recordSessionCompleted,
   defaultFrames,
