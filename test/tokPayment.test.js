@@ -142,7 +142,6 @@ test('onStateChange does NOT create an order while paymentMethod is still null (
   );
 
   assert.equal(fakeDb.docIds().length, 0);
-  assert.equal(tokPayment.getDeepLink('s1'), null);
   tokPayment._stopAllPollsForTests();
 });
 
@@ -447,38 +446,6 @@ test('a quantity-0 order with no configured QR variant falls back to a 0-price p
 });
 
 // ---- Real SumUp auto-confirmation (2026-08-11) ----
-
-test('getDeepLink returns a sumupmerchant:// deep link whose foreign-tx-id matches the order doc ID', async () => {
-  process.env.TOK2026_EVENT_ID = 'test-event';
-  const tokPayment = freshTokPayment();
-  const fakeDb = makeFakeDb();
-  tokPayment._setDbForTests(fakeDb.db);
-
-  const recorder = makeDispatchRecorder({ sessionId: 's1', phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, paymentMethod: null });
-  tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
-
-  await tokPayment.onStateChange(
-    { phase: PHASES.QUANTITY, printOrder: { quantity: 2 }, sessionId: 's1' },
-    { phase: PHASES.PAYMENT, printOrder: { quantity: 2 }, sessionId: 's1', paymentMethod: 'sumup' },
-  );
-
-  const [docId] = fakeDb.docIds();
-  const deepLink = tokPayment.getDeepLink('s1');
-
-  assert.ok(deepLink.startsWith('sumupmerchant://pay/1.0?'));
-  assert.ok(deepLink.includes(`foreign-tx-id=${docId}`));
-  assert.ok(deepLink.includes('currency=EUR'));
-
-  tokPayment._stopAllPollsForTests();
-});
-
-test('getDeepLink returns null once the session has moved past PAYMENT (no active order)', async () => {
-  process.env.TOK2026_EVENT_ID = 'test-event';
-  const tokPayment = freshTokPayment();
-  tokPayment._setDbForTests(makeFakeDb().db);
-
-  assert.equal(tokPayment.getDeepLink('never-had-a-session'), null);
-});
 
 test('a poll tick nudges TOK2026s immediate-confirm callable for a card/sumup order', async () => {
   process.env.TOK2026_EVENT_ID = 'test-event';

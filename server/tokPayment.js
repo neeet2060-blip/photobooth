@@ -36,13 +36,6 @@ const TOK2026_PROJECT_ID = 'taste-of-korea-3ac1b';
 const TOK2026_APP_NAME = 'tok2026';
 const POLL_INTERVAL_MS = 4000;
 
-// Public affiliate credentials (safe to embed — already shipped in TOK2026's
-// own client bundle, src/lib/constants.js). Used only to build a
-// sumupmerchant:// deep link; the real merchant secret (SUMUP_API_KEY) never
-// leaves TOK2026's Cloud Functions and this module never touches it.
-const SUMUP_AFFILIATE_KEY = 'sup_afk_kSOjqv0UaciJXkW5C2wq9kMoj04cp8DX';
-const SUMUP_APP_ID = 'MGA74PYT';
-
 // TOK2026's pollBoothCardPaymentsNow is an unauthenticated onCall (see
 // functions/index.js — safe because it only ever confirms a real matching
 // SumUp SUCCESSFUL transaction). Invoked here as a plain HTTPS POST
@@ -59,7 +52,7 @@ let warnedOnce = false;
 let _dispatch = null;
 let _getState = null;
 
-// sessionId -> { docId, sessionId, remotePaymentMethod, localPaymentMethod, deepLink, intervalId }
+// sessionId -> { docId, sessionId, remotePaymentMethod, localPaymentMethod, intervalId }
 const activePolls = new Map();
 
 function warnOnce(message) {
@@ -285,10 +278,12 @@ async function startOrderForSession(nextState) {
   // The session may have moved on while the (async) create was in flight.
   if (!isPollStillLive(nextState.sessionId)) return;
 
-  const deepLink = `sumupmerchant://pay/1.0?amount=${docData.total.toFixed(2)}&currency=EUR`
-    + `&affiliate-key=${SUMUP_AFFILIATE_KEY}&app-id=${SUMUP_APP_ID}`
-    + `&title=${encodeURIComponent(name)}&foreign-tx-id=${encodeURIComponent(ref.id)}`;
-
+  // Note: ref.id (the order's own Firestore doc ID) is also the foreign-tx-id
+  // TOK2026 expects a matching SumUp deep link to carry — but that deep link
+  // is now built and opened from TOK2026's own exp1 admin screen (the actual
+  // phone with the SumUp app / Tap to Pay, since this module's control.js
+  // tablet can't do Tap to Pay), not from here. See ExpPosPage.jsx's
+  // payCardForPendingOrder.
   const intervalId = setInterval(() => {
     pollOnce(nextState.sessionId).catch(() => {});
   }, POLL_INTERVAL_MS);
@@ -298,7 +293,6 @@ async function startOrderForSession(nextState) {
     sessionId: nextState.sessionId,
     remotePaymentMethod,
     localPaymentMethod,
-    deepLink,
     intervalId,
   });
 }
@@ -441,19 +435,6 @@ async function onStateChange(prevState, nextState) {
 }
 
 /**
- * Returns the SumUp deep-link URL for the session's current active order,
- * or null if there is no active order (bridge disabled, not yet created, or
- * the session has moved past PAYMENT). Called from server/routes.js's
- * GET /api/tok-payment-link, which control.js hits right before opening the
- * SumUp app so the deep link's foreign-tx-id always matches a real,
- * already-written expOrders doc.
- */
-function getDeepLink(sessionId) {
-  const entry = activePolls.get(sessionId);
-  return entry ? entry.deepLink : null;
-}
-
-/**
  * Test-only seam: trigger a single poll tick synchronously instead of
  * waiting on the real 4-second setInterval.
  */
@@ -486,7 +467,6 @@ module.exports = {
   isEnabled,
   init,
   onStateChange,
-  getDeepLink,
   _setDbForTests,
   _pollOnceForTests,
   _stopAllPollsForTests,

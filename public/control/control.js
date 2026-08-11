@@ -490,68 +490,50 @@ function renderQuantity(state) {
 }
 
 // Local-only UI flag (not dispatched state): set once the participant has
-// clicked confirm on a cash order, so renderPayment can show a "waiting on
-// staff" message instead of leaving the click looking like a no-op. Reset
-// implicitly by comparing against state.sessionId in renderPayment, same
-// pattern as quantityScreenSessionId above.
-let cashConfirmSessionId = null;
+// clicked confirm, so renderPayment can show a "waiting on staff" message
+// instead of leaving the click looking like a no-op. Reset implicitly by
+// comparing against state.sessionId in renderPayment, same pattern as
+// quantityScreenSessionId above.
+let paymentConfirmedSessionId = null;
 
-// Real auto-confirmation (2026-08-11, TOK2026 integration): whether the
-// chosen method is 'sumup' or 'cash', clicking confirm must NOT itself
-// finalize payment locally — that decision belongs to TOK2026's existing
-// confirmation system (SumUp transaction match for card, staff tapping
-// "confirm" on the exp1 pending-orders screen for cash). The server's
-// background tokPayment.js poll (already running since the order was
-// created) is what actually dispatches confirmPrintPayment, once TOK2026
-// reports paymentStatus:"paid" — regardless of which method confirmed it.
-// This button's own job is just: for card, hand off to the SumUp app; for
-// cash, nothing (the participant has signaled "confirm", staff takes it
-// from here) — then wait. Only when the TOK2026 bridge isn't configured for
-// this event at all (getDeepLink comes back null) is there no auto-confirm
-// to wait for, so this falls back to the pre-integration behavior of
-// dispatching confirmPrintPayment immediately.
+// Real auto-confirmation (2026-08-11, TOK2026 integration): clicking confirm
+// must NOT itself finalize payment locally, for either method — that
+// decision belongs to TOK2026's existing confirmation system (SumUp
+// transaction match for card, staff tapping "confirm" on the exp1
+// pending-orders screen for cash). The server's background tokPayment.js
+// poll (already running since the order was created) is what actually
+// dispatches confirmPrintPayment, once TOK2026 reports paymentStatus:"paid".
+//
+// Card payments are NOT opened here: this control screen runs on a tablet,
+// and SumUp Tap to Pay only works from a phone — so the actual SumUp deep
+// link is opened from TOK2026's own exp1 admin screen on the real payment
+// phone (see ExpPosPage.jsx's payCardForPendingOrder), which already shows
+// this order the moment it's created. This button's job is just to signal
+// "confirmed, staff can proceed" and then wait.
+//
+// Only when the TOK2026 bridge isn't configured for this event at all is
+// there no auto-confirm to wait for, so this falls back to the
+// pre-integration behavior of dispatching confirmPrintPayment immediately.
 async function handlePaymentConfirm(state) {
-  let deepLink = null;
+  let bridgeEnabled = false;
   try {
-    const res = await fetch(`/api/tok-payment-link?sessionId=${encodeURIComponent(state.sessionId)}`);
+    const res = await fetch('/api/tok-payment-status');
     const data = await res.json();
-    deepLink = data && data.deepLink;
+    bridgeEnabled = Boolean(data && data.enabled);
   } catch (err) {
-    // Network hiccup — fall through to the no-bridge fallback below.
+    // Network hiccup — treat as disabled, same as the fetch failing to
+    // resolve any config: fall back rather than leave the visitor stuck.
   }
 
-  if (!deepLink) {
+  if (!bridgeEnabled) {
     sendAction('confirmPrintPayment');
     return;
   }
 
-  if (state.paymentMethod !== 'sumup') {
-    // Cash: nothing to open locally. The order already carries
-    // paymentMethod:'cash' (server/tokPayment.js keeps it in sync with this
-    // choice), so staff sees it correctly on TOK2026's pending-orders
-    // screen; the background poll picks up their confirmation from there.
-    // This click doesn't change any dispatched state, so re-render locally
-    // to swap in the "waiting on staff" message below (renderPayment).
-    cashConfirmSessionId = state.sessionId;
-    render(lastState);
-    return;
-  }
-
-  // Mirrors TOK2026's own openSumUpDeepLinkOrAlert idiom (src/lib/session.js):
-  // there's no reliable way to know upfront whether the SumUp app is
-  // installed on this device, so detect it via the page being backgrounded
-  // (the OS switching to the SumUp app) — if that hasn't happened shortly
-  // after navigating, the deep link silently failed and staff needs to know
-  // rather than see this screen sit there with no explanation.
-  let appOpened = false;
-  const markOpened = () => { appOpened = true; };
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) markOpened();
-  }, { once: true });
-  setTimeout(() => {
-    if (!appOpened) alert(t('paymentSumupAppMissingMsg'));
-  }, 1500);
-  window.location.href = deepLink;
+  // This click doesn't change any dispatched state, so re-render locally to
+  // swap in the "waiting on staff" message below (renderPayment).
+  paymentConfirmedSessionId = state.sessionId;
+  render(lastState);
 }
 
 function renderPayment(state) {
@@ -567,11 +549,11 @@ function renderPayment(state) {
       {
         class: state.paymentMethod === method ? 'primary' : null,
         onclick: () => {
-          // A fresh method choice (even re-choosing 'cash' after switching
-          // away) always clears a prior "waiting on staff" flag — otherwise
-          // switching cash -> card -> cash again would show that state
-          // without the participant having clicked confirm again.
-          cashConfirmSessionId = null;
+          // A fresh method choice (even re-choosing the same method after
+          // switching away) always clears a prior "waiting on staff" flag —
+          // otherwise switching cash -> card -> cash again would show that
+          // state without the participant having clicked confirm again.
+          paymentConfirmedSessionId = null;
           sendAction('choosePaymentMethod', { method });
         },
       },
@@ -587,10 +569,10 @@ function renderPayment(state) {
     ]),
   ];
 
-  const cashConfirmed = state.paymentMethod === 'cash' && cashConfirmSessionId === state.sessionId;
+  const confirmed = Boolean(state.paymentMethod) && paymentConfirmedSessionId === state.sessionId;
 
   if (state.paymentMethod) {
-    children.push(el('div', {}, cashConfirmed ? t('paymentCashAwaitingStaff') : t('paymentAwaiting')));
+    children.push(el('div', {}, confirmed ? t('paymentAwaitingStaffConfirm') : t('paymentAwaiting')));
   }
 
   children.push(
@@ -607,7 +589,7 @@ function renderPayment(state) {
         'button',
         {
           class: 'primary big-button',
-          disabled: (state.paymentMethod && !cashConfirmed) ? null : 'disabled',
+          disabled: (state.paymentMethod && !confirmed) ? null : 'disabled',
           onclick: () => handlePaymentConfirm(state),
         },
         t('paymentConfirmButton'),

@@ -642,21 +642,15 @@ function registerRoutes(app, deps) {
     res.json({ ok: true, ip: getLanIp(), port });
   });
 
-  // Fetched by control.js right before opening the SumUp app, so the
-  // deep link's foreign-tx-id always matches a real, already-written
-  // TOK2026 expOrders doc (see server/tokPayment.js). Scoped to the
-  // caller's own sessionId matching the live session — a stale/foreign
-  // sessionId (session already moved on, or never had this bridge active)
-  // just gets deepLink: null rather than an error, since "not ready yet"
-  // is a normal, expected state here (e.g. bridge not configured this event).
-  app.get('/api/tok-payment-link', (req, res) => {
-    const { sessionId } = req.query;
-    const state = getState();
-    if (typeof sessionId !== 'string' || sessionId !== state.sessionId) {
-      res.json({ ok: true, deepLink: null });
-      return;
-    }
-    res.json({ ok: true, deepLink: tokPayment.getDeepLink(sessionId) });
+  // Fetched by control.js's payment-confirm handler to decide whether an
+  // auto-confirm is coming (TOK2026 bridge active — wait silently) or not
+  // (bridge unconfigured this event — fall back to the pre-integration
+  // behavior of confirming immediately). Card payments themselves are opened
+  // from TOK2026's own exp1 admin screen on the actual phone terminal (see
+  // ExpPosPage.jsx's payCardForPendingOrder) — this tablet never opens a
+  // SumUp deep link, since Tap to Pay isn't supported on tablets.
+  app.get('/api/tok-payment-status', (req, res) => {
+    res.json({ ok: true, enabled: tokPayment.isEnabled() });
   });
 
   // ---- Role pages: serve each role's index.html directly on the bare path ----
