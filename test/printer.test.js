@@ -60,6 +60,67 @@ test('cups mode builds the correct argv array and invokes the injected exec func
   assert.deepEqual(calls[0].args, ['-d', 'MyPrinter_1', '-n', '3', '-o', 'media=4x6', '-o', 'fit-to-page', srcFile]);
 });
 
+test('windows mode invokes powershell.exe with the file/printerName/copies as trailing positional args', async () => {
+  const calls = [];
+  const execFileImpl = async (cmd, args) => {
+    calls.push({ cmd, args });
+    return { stdout: '', stderr: '' };
+  };
+
+  await printer.printFile(srcFile, {
+    copies: 2,
+    printerName: 'DNP_DS620',
+    mode: 'windows',
+    execFileImpl,
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].cmd, 'powershell.exe');
+  // The trailing three args (file, printerName, copies) are the untrusted
+  // values — everything before them is the fixed script text.
+  const args = calls[0].args;
+  assert.deepEqual(args.slice(-3), [srcFile, 'DNP_DS620', '2']);
+  assert.ok(args.includes('-NoProfile'));
+});
+
+test('windows mode rejects an invalid copies value before ever invoking execFile', async () => {
+  const calls = [];
+  const execFileImpl = async (cmd, args) => {
+    calls.push({ cmd, args });
+    return { stdout: '', stderr: '' };
+  };
+
+  await assert.rejects(() =>
+    printer.printFile(srcFile, {
+      copies: 0,
+      printerName: 'DNP_DS620',
+      mode: 'windows',
+      execFileImpl,
+    }),
+  );
+
+  assert.equal(calls.length, 0);
+});
+
+test('SECURITY: malicious printerName is rejected by allowlist validation for windows mode too', async () => {
+  const calls = [];
+  const execFileImpl = async (cmd, args) => {
+    calls.push({ cmd, args });
+    return { stdout: '', stderr: '' };
+  };
+
+  await assert.rejects(() =>
+    printer.printFile(srcFile, {
+      copies: 1,
+      printerName: '"; Remove-Item C:\\ -Recurse -Force #',
+      mode: 'windows',
+      execFileImpl,
+    }),
+  );
+
+  assert.equal(calls.length, 0, 'execFile must never be invoked with an unvalidated printerName');
+});
+
 test('unknown print mode rejects with a clear error message', async () => {
   await assert.rejects(
     () => printer.printFile(srcFile, { copies: 1, mode: 'fax' }),

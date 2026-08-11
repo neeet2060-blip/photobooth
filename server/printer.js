@@ -58,6 +58,61 @@ async function printCupsMode(filePath, { copies, printerName, media, execFileImp
   return { mode: 'cups', args };
 }
 
+// Prints via .NET's System.Drawing.Printing.PrintDocument, which ships with
+// every Windows install (no CUPS/'lp' equivalent exists on Windows, and no
+// extra tool like SumatraPDF needs to be installed). The image is stretched
+// to the page bounds — matches cups mode's 'fit-to-page' behavior — so the
+// printer driver's configured paper size (set once in Windows' printer
+// properties, e.g. 4x6) determines the physical output size.
+//
+// filePath/printerName/copies are passed as trailing positional args to
+// powershell.exe (read back via $args[0..2] inside the script), never
+// string-interpolated into the script text itself — so even though
+// printerName is already allowlist-validated below, there is no path by
+// which any of these three values could be interpreted as PowerShell syntax.
+const WINDOWS_PRINT_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+$file = $args[0]
+$printerName = $args[1]
+$copies = [int]$args[2]
+Add-Type -AssemblyName System.Drawing
+$img = [System.Drawing.Image]::FromFile($file)
+try {
+  $doc = New-Object System.Drawing.Printing.PrintDocument
+  $doc.PrinterSettings.PrinterName = $printerName
+  if (-not $doc.PrinterSettings.IsValid) {
+    throw "Printer not found or not ready: $printerName"
+  }
+  $doc.PrinterSettings.Copies = [int16]$copies
+  $doc.add_PrintPage({
+    param($sender, $e)
+    $e.Graphics.DrawImage($img, $e.PageBounds)
+  })
+  $doc.Print()
+} finally {
+  $img.Dispose()
+}
+`;
+
+async function printWindowsMode(filePath, { copies, printerName, execFileImpl }) {
+  if (!PRINTER_NAME_REGEX.test(printerName || '')) {
+    throw new Error(`Invalid printerName for windows mode: ${JSON.stringify(printerName)}`);
+  }
+  const copiesNum = Number(copies);
+  if (!Number.isInteger(copiesNum) || copiesNum < 1) {
+    throw new Error(`Invalid copies for windows mode: ${JSON.stringify(copies)}`);
+  }
+  const args = [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass',
+    '-Command', WINDOWS_PRINT_SCRIPT,
+    filePath, printerName, String(copiesNum),
+  ];
+  await execFileImpl('powershell.exe', args);
+  return { mode: 'windows', args };
+}
+
 /**
  * @param {string} filePath - JPEG file to print
  * @param {object} opts
@@ -65,7 +120,7 @@ async function printCupsMode(filePath, { copies, printerName, media, execFileImp
  * @param {string} [opts.printerName]
  * @param {string} [opts.media]
  * @param {object} [opts.extraOptions]
- * @param {'folder'|'cups'} opts.mode
+ * @param {'folder'|'cups'|'windows'} opts.mode
  * @param {string} [opts.jobId] - required for 'folder' mode (used in the output filename)
  * @param {(cmd: string, args: string[]) => Promise<any>} [opts.execFileImpl] - injectable for tests
  * @returns {Promise<object>}
@@ -78,6 +133,9 @@ function printFile(filePath, opts = {}) {
   }
   if (mode === 'cups') {
     return printCupsMode(filePath, { copies, printerName, media, execFileImpl });
+  }
+  if (mode === 'windows') {
+    return printWindowsMode(filePath, { copies, printerName, execFileImpl });
   }
   return Promise.reject(new Error(`Unknown print mode: ${mode}`));
 }

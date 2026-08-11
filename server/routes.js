@@ -479,7 +479,7 @@ function registerRoutes(app, deps) {
       next.qrUnitPriceCents = num;
     }
     if (body.printMode !== undefined) {
-      if (body.printMode !== 'folder' && body.printMode !== 'cups') {
+      if (body.printMode !== 'folder' && body.printMode !== 'cups' && body.printMode !== 'windows') {
         return res.status(400).json({ ok: false, error: 'invalid_printMode' });
       }
       next.printMode = body.printMode;
