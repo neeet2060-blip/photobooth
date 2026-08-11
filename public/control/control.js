@@ -560,6 +560,13 @@ function renderPayment(state) {
   const totalLabel = printSettingsCache
     ? t('paymentTotalLabel', { total: formatEuros(totalCentsFor(quantity, printSettingsCache)) })
     : t('quantityOf', { quantity });
+  // 이 세션이 시작된 시각(2026-08-11 사용자 요청) — TOK2026 결제 대시보드엔 여러 미결제건이 동시에
+  // 뜰 수 있어서, 직원이 "지금 이 손님" 주문을 시각으로 맞춰 찾은 뒤 그 화면의 SumUp 버튼으로
+  // 결제를 시도한다. state.createdAt은 'start' 액션에서 찍히므로 결제 화면 도달 시점보다는 약간
+  // 이르지만(포맷/테마 선택 시간만큼), 초 단위가 아닌 분 단위 매칭 목적이라 오차는 무시할 만하다.
+  const createdTimeLabel = state.createdAt
+    ? t('paymentCreatedAtLabel', { time: new Date(state.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
+    : null;
 
   const methodBtn = (method, label) =>
     el(
@@ -581,11 +588,16 @@ function renderPayment(state) {
   const children = [
     el('h1', {}, t('paymentTitle')),
     el('div', {}, totalLabel),
+  ];
+  if (createdTimeLabel) {
+    children.push(el('div', { style: 'color:var(--muted, #888);font-size:14px;' }, createdTimeLabel));
+  }
+  children.push(
     el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
       methodBtn('sumup', t('paymentMethodSumup')),
       methodBtn('cash', t('paymentMethodCash')),
     ]),
-  ];
+  );
 
   const confirmed = Boolean(state.paymentMethod) && paymentConfirmedSessionId === state.sessionId;
 
