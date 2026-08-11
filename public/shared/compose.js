@@ -60,7 +60,16 @@ export async function composeFrame({ canvas, layoutName, photoUrls, frameUrl, fi
   layout.slots.forEach((slot, i) => {
     const img = photos[i];
     if (!img) return;
+    // "cover" fit centers the image and can extend past the slot rect on one
+    // axis (whichever isn't the constraining one) — without clipping, that
+    // overflow paints into neighboring slots or the frame's transparent
+    // margin instead of being cropped away.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(slot.x, slot.y, slot.w, slot.h);
+    ctx.clip();
     drawCover(ctx, img, slot.x, slot.y, slot.w, slot.h);
+    ctx.restore();
   });
   ctx.restore();
 
