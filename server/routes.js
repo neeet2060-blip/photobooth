@@ -223,7 +223,18 @@ function registerRoutes(app, deps) {
     // phones. This is always the fallback URL — used as-is when cloud
     // delivery is disabled/unreachable/slow, see the cloud-upload attempt
     // below.
-    const lanUrl = `http://${lanIp}:${httpPort}/p/${token}`;
+    //
+    // PHOTOBOOTH_PUBLIC_URL (the Tailscale Funnel hostname, 2026-08-12) is
+    // preferred when set: the LAN URL dies the moment the visitor leaves the
+    // venue hotspot, so a cloud-upload timeout used to hand out a QR code
+    // that was already broken by the time they scanned it at home. The
+    // funnel URL is real HTTPS and keeps working from mobile data. Visitors
+    // are not asked for the booth password here — /p/<token> is public (see
+    // PUBLIC_PATH_REGEX in server/auth.js).
+    const publicBase = (process.env.PHOTOBOOTH_PUBLIC_URL || '').replace(/\/+$/, '');
+    const lanUrl = publicBase
+      ? `${publicBase}/p/${token}`
+      : `http://${lanIp}:${httpPort}/p/${token}`;
 
     let finalUrl = lanUrl;
     let tokenRecord = { sessionId, createdAt };
@@ -303,9 +314,34 @@ function registerRoutes(app, deps) {
     }
     const settings = store.readSettings();
     return res.send(renderDownloadPage({
-      imageSrc: `/photos/${entry.sessionId}/final.jpg`,
+      // Addressed by token, not by sessionId: sessionIds come from
+      // Date.now() + Math.random() (state.js genSessionId) and are guessable,
+      // so a /photos/<sessionId>/ URL would let anyone who can reach this
+      // server walk other visitors' photos. The token is
+      // crypto.randomBytes(12) and is only ever shown to its own visitor.
+      imageSrc: `/p/${token}/image.jpg`,
       autoDeleteHours: settings.autoDeleteHours,
     }));
+  });
+
+  // Token-scoped image bytes for the page above. Same validation as the page
+  // route — the token is the capability, and it is checked on every request
+  // rather than trusted because the page was rendered once.
+  app.get('/p/:token/image.jpg', (req, res) => {
+    const { token } = req.params;
+    if (!TOKEN_REGEX.test(token)) {
+      return res.status(404).send('Not found');
+    }
+    const entry = tokens[token];
+    if (!entry) {
+      return res.status(404).send('Not found');
+    }
+    const finalPath = path.join(store.PHOTOS_DIR, entry.sessionId, 'final.jpg');
+    if (!fs.existsSync(finalPath)) {
+      return res.status(404).send('Not found');
+    }
+    res.type('image/jpeg');
+    return res.sendFile(finalPath);
   });
 
   // ---- Admin: frames ----
