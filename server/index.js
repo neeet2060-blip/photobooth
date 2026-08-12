@@ -14,6 +14,7 @@ const { registerRoutes, sweepExpiredTokens } = require('./routes');
 const stateMachine = require('./state');
 const printqueue = require('./printqueue');
 const tokPayment = require('./tokPayment');
+const auth = require('./auth');
 
 const HTTPS_PORT = Number(process.env.PORT) || 3000;
 const HTTP_PORT = Number(process.env.HTTP_PORT) || 3001;
@@ -139,8 +140,18 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Registered before every route (including express.static below) so that the
+// password gate cannot be bypassed by any path. No-ops when
+// PHOTOBOOTH_PASSWORD is unset, keeping LAN-only setups exactly as they were.
+app.use(auth.middleware);
+
 registerRoutes(app, { getState, dispatch, port: HTTPS_PORT, httpPort: HTTP_PORT });
 
+// Behind the gate: session ids are generated from Date.now() + Math.random()
+// (server/state.js genSessionId), which is guessable enough that exposing
+// this directory on a public URL would let someone enumerate other visitors'
+// photos. Visitors reach their own photo through /p/<token>/image.jpg, whose
+// token is crypto.randomBytes(12).
 app.use('/photos', express.static(store.PHOTOS_DIR));
 app.use('/frames', express.static(store.FRAMES_DIR));
 // index: 'index.html' lets each role directory (public/control/, public/camera/, ...)
@@ -187,6 +198,14 @@ const io = new SocketIOServer(httpsServer, {
   maxHttpBufferSize: 1e7,
 });
 io.attach(httpServer);
+
+// The HTTP gate does not cover socket handshakes, and `action` events below
+// can confirm payments and reset live sessions — so an unauthenticated socket
+// would hand a public visitor full control of the booth.
+io.use((socket, next) => {
+  if (auth.allowSocket(socket.handshake)) return next();
+  next(new Error('unauthorized'));
+});
 
 io.on('connection', (socket) => {
   socket.emit('state', sessionState);
@@ -338,6 +357,14 @@ function printStartupBanner() {
     `관리자:      ${base}/admin`,
     '',
     `(노트북 자체 화면용: http://localhost:${HTTP_PORT} 도 사용 가능)`,
+    '',
+    // The booth is reachable from the public internet whenever the tunnel is
+    // up, and an unprotected /admin there exposes takings, settings, and
+    // socket actions that can confirm payments. Silence here would read as
+    // "fine" — so say which of the two states we're in, every boot.
+    auth.isEnabled()
+      ? '비밀번호 보호: 켜짐'
+      : '⚠ 비밀번호 보호: 꺼짐 — 터널/공개 주소로 열지 마세요 (secrets/password.txt 확인)',
   ];
   const width = Math.max(...lines.map((l) => l.length)) + 4;
   const bar = '='.repeat(width);

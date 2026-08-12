@@ -21,15 +21,15 @@ const store = require('./store');
 
 // Same allowlist used by server/routes.js when validating admin settings
 // (printerName/printMedia) — keep these two definitions in sync.
-//
 // Real-world Windows/CUPS printer names routinely contain spaces and
 // parentheses (e.g. "Canon SELPHY CP1500", "DNP DS620 (Copy 1)") — the
 // original letters/digits/underscore/period/hyphen-only pattern rejected
 // every realistic Windows printer name, which would have silently broken
 // printMode:'windows' the moment an operator pasted their actual printer
-// name into the admin settings form (2026-08-11 pre-launch audit finding).
-// This is a sanity check, not the injection defense: printerName is always
-// passed to execFile as a positional argv/script argument (see
+// name into the admin settings form (2026-08-11 pre-launch audit finding,
+// fixed independently on both sides of a concurrent merge). This is a
+// sanity check, not the injection defense: printerName is always passed to
+// execFile as a positional argv/script argument (see
 // printCupsMode/printWindowsMode), never interpolated into a shell command
 // or script string, so broadening the charset here doesn't reopen any
 // injection surface.

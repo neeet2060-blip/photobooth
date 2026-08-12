@@ -83,6 +83,24 @@ test('windows mode invokes powershell.exe with the file/printerName/copies as tr
   assert.ok(args.includes('-NoProfile'));
 });
 
+test('windows mode accepts a real Windows printer name containing spaces and parentheses', async () => {
+  const calls = [];
+  const execFileImpl = async (cmd, args) => {
+    calls.push({ cmd, args });
+    return { stdout: '', stderr: '' };
+  };
+
+  // Windows names printers like this by default; rejecting spaces would make
+  // windows mode unable to target any actual printer on the event PC.
+  for (const name of ['EPSON ET-1810 Series', 'Canon TR8500 series (Kopie 1)']) {
+    await printer.printFile(srcFile, { copies: 1, printerName: name, mode: 'windows', execFileImpl });
+  }
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].args.at(-2), 'EPSON ET-1810 Series');
+  assert.equal(calls[1].args.at(-2), 'Canon TR8500 series (Kopie 1)');
+});
+
 test('windows mode rejects an invalid copies value before ever invoking execFile', async () => {
   const calls = [];
   const execFileImpl = async (cmd, args) => {

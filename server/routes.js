@@ -14,7 +14,6 @@ const { PRINTER_NAME_REGEX, PRINT_MEDIA_REGEX } = require('./printer');
 const cloud = require('./cloud');
 const tokPayment = require('./tokPayment');
 const { LAYOUTS } = require('./layouts');
-const { requireAdmin } = require('./adminAuth');
 
 const TOKEN_REGEX = /^[a-f0-9]{24}$/;
 
@@ -224,7 +223,18 @@ function registerRoutes(app, deps) {
     // phones. This is always the fallback URL — used as-is when cloud
     // delivery is disabled/unreachable/slow, see the cloud-upload attempt
     // below.
-    const lanUrl = `http://${lanIp}:${httpPort}/p/${token}`;
+    //
+    // PHOTOBOOTH_PUBLIC_URL (the Tailscale Funnel hostname, 2026-08-12) is
+    // preferred when set: the LAN URL dies the moment the visitor leaves the
+    // venue hotspot, so a cloud-upload timeout used to hand out a QR code
+    // that was already broken by the time they scanned it at home. The
+    // funnel URL is real HTTPS and keeps working from mobile data. Visitors
+    // are not asked for the booth password here — /p/<token> is public (see
+    // PUBLIC_PATH_REGEX in server/auth.js).
+    const publicBase = (process.env.PHOTOBOOTH_PUBLIC_URL || '').replace(/\/+$/, '');
+    const lanUrl = publicBase
+      ? `${publicBase}/p/${token}`
+      : `http://${lanIp}:${httpPort}/p/${token}`;
 
     let finalUrl = lanUrl;
     let tokenRecord = { sessionId, createdAt };
@@ -304,18 +314,43 @@ function registerRoutes(app, deps) {
     }
     const settings = store.readSettings();
     return res.send(renderDownloadPage({
-      imageSrc: `/photos/${entry.sessionId}/final.jpg`,
+      // Addressed by token, not by sessionId: sessionIds come from
+      // Date.now() + Math.random() (state.js genSessionId) and are guessable,
+      // so a /photos/<sessionId>/ URL would let anyone who can reach this
+      // server walk other visitors' photos. The token is
+      // crypto.randomBytes(12) and is only ever shown to its own visitor.
+      imageSrc: `/p/${token}/image.jpg`,
       autoDeleteHours: settings.autoDeleteHours,
     }));
   });
 
+  // Token-scoped image bytes for the page above. Same validation as the page
+  // route — the token is the capability, and it is checked on every request
+  // rather than trusted because the page was rendered once.
+  app.get('/p/:token/image.jpg', (req, res) => {
+    const { token } = req.params;
+    if (!TOKEN_REGEX.test(token)) {
+      return res.status(404).send('Not found');
+    }
+    const entry = tokens[token];
+    if (!entry) {
+      return res.status(404).send('Not found');
+    }
+    const finalPath = path.join(store.PHOTOS_DIR, entry.sessionId, 'final.jpg');
+    if (!fs.existsSync(finalPath)) {
+      return res.status(404).send('Not found');
+    }
+    res.type('image/jpeg');
+    return res.sendFile(finalPath);
+  });
+
   // ---- Admin: frames ----
 
-  app.get('/api/admin/frames', requireAdmin, (req, res) => {
+  app.get('/api/admin/frames', (req, res) => {
     res.json({ ok: true, frames: store.readFrames() });
   });
 
-  app.post('/api/admin/frames', requireAdmin, frameUpload.single('file'), (req, res) => {
+  app.post('/api/admin/frames', frameUpload.single('file'), (req, res) => {
     if (!req.file) {
       return res.status(400).json({ ok: false, error: 'missing_file' });
     }
@@ -345,7 +380,7 @@ function registerRoutes(app, deps) {
     res.json({ ok: true, frames: next });
   });
 
-  app.post('/api/admin/frames/:id', requireAdmin, (req, res) => {
+  app.post('/api/admin/frames/:id', (req, res) => {
     const { id } = req.params;
     if (!FRAME_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -378,7 +413,7 @@ function registerRoutes(app, deps) {
     return res.json({ ok: true, frames: written });
   });
 
-  app.delete('/api/admin/frames/:id', requireAdmin, (req, res) => {
+  app.delete('/api/admin/frames/:id', (req, res) => {
     const { id } = req.params;
     if (!FRAME_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -399,11 +434,11 @@ function registerRoutes(app, deps) {
 
   // ---- Admin: settings ----
 
-  app.get('/api/admin/settings', requireAdmin, (req, res) => {
+  app.get('/api/admin/settings', (req, res) => {
     res.json({ ok: true, settings: store.readSettings() });
   });
 
-  app.post('/api/admin/settings', requireAdmin, (req, res) => {
+  app.post('/api/admin/settings', (req, res) => {
     const body = req.body || {};
     const current = store.readSettings();
     const next = { ...current };
@@ -507,7 +542,7 @@ function registerRoutes(app, deps) {
   // Never include credential paths, key contents, or any other secret value
   // here — this is purely operational visibility (is it on, what bucket,
   // how many photos went out each way).
-  app.get('/api/admin/cloud', requireAdmin, (req, res) => {
+  app.get('/api/admin/cloud', (req, res) => {
     const settings = store.readSettings();
     const enabled = cloud.isCloudEnabled();
     const tokensSnapshot = store.readJsonFile(TOKENS_FILE, {});
@@ -532,7 +567,7 @@ function registerRoutes(app, deps) {
 
   // ---- Admin: stats ----
 
-  app.get('/api/admin/stats', requireAdmin, (req, res) => {
+  app.get('/api/admin/stats', (req, res) => {
     const stats = store.readStats();
     const completionRate = stats.sessionsStarted > 0
       ? Math.round((stats.sessionsCompleted / stats.sessionsStarted) * 1000) / 10
@@ -544,11 +579,11 @@ function registerRoutes(app, deps) {
 
   const PRINT_JOB_ID_REGEX = /^[a-z0-9]{1,40}$/;
 
-  app.get('/api/admin/printqueue', requireAdmin, (req, res) => {
+  app.get('/api/admin/printqueue', (req, res) => {
     res.json({ ok: true, jobs: printqueue.getQueueSnapshot() });
   });
 
-  app.post('/api/admin/printqueue/:id/retry', requireAdmin, (req, res) => {
+  app.post('/api/admin/printqueue/:id/retry', (req, res) => {
     const { id } = req.params;
     if (!PRINT_JOB_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -560,7 +595,7 @@ function registerRoutes(app, deps) {
     return res.json({ ok: true, job });
   });
 
-  app.post('/api/admin/printqueue/:id/cancel', requireAdmin, (req, res) => {
+  app.post('/api/admin/printqueue/:id/cancel', (req, res) => {
     const { id } = req.params;
     if (!PRINT_JOB_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -579,7 +614,7 @@ function registerRoutes(app, deps) {
   // payment. A failed print is an operational/printer problem, not a
   // refund, so it still counts as revenue. Only 'canceled' jobs (which can
   // only happen while still 'queued', i.e. never printed) are excluded.
-  app.get('/api/admin/printsettlement', requireAdmin, (req, res) => {
+  app.get('/api/admin/printsettlement', (req, res) => {
     const jobs = printqueue.getQueueSnapshot().filter((j) => j.status !== 'canceled');
 
     let totalPrintsSold = 0;
