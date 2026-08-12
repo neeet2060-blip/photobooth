@@ -192,7 +192,18 @@ Rename-Computer -NewName "photobooth" -Restart
 
 `ecosystem.config.cjs`에 `TOK2026_EVENT_ID: 'de-dietzenbach-2026'`가 이미 박혀 있음 — **8/15
 하나우(Hanau) 행사로 넘어갈 때는 이 값을 그 이벤트의 실제 eventId로 바꿔야 한다**(TOK2026
-총괄관리자 화면에서 확인 가능). 바꾼 뒤 `npx pm2 restart photobooth` 필요.
+총괄관리자 화면에서 확인 가능).
+
+**중요**: 바꾼 뒤 `npx pm2 restart photobooth`(이름으로 재시작)로는 안 먹힌다 — pm2는 그 파일을
+다시 안 읽고 예전 값을 그대로 쓴다. 반드시 설정 파일을 직접 지정해서 재시작해야 한다:
+
+```powershell
+npx pm2 restart ecosystem.config.cjs --update-env
+```
+
+`secrets/password.txt`(4번)의 비밀번호를 바꿀 때도 마찬가지 — `ecosystem.config.cjs`가 그 파일을
+읽어서 넘겨주는 구조라, 재시작 방식은 똑같다. 확인하려면 로그인 화면(`/login`)에서 예전
+비밀번호가 더 이상 안 먹히는지 테스트해보면 된다.
 
 ## 11. 최종 검증 체크리스트
 
