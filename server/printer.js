@@ -21,7 +21,12 @@ const store = require('./store');
 
 // Same allowlist used by server/routes.js when validating admin settings
 // (printerName/printMedia) — keep these two definitions in sync.
-const PRINTER_NAME_REGEX = /^[a-zA-Z0-9_.-]{1,64}$/;
+// Spaces and parentheses are allowed because essentially every real Windows
+// printer name has them ("EPSON ET-1810 Series", "Canon TR8500 series (Kopie 1)")
+// — without them, windows mode could never target an actual printer. Both are
+// inert here: printerName is passed as a single argv element to execFile (never
+// a shell string), and shell metacharacters (; & | " ' $ ` \ / #) stay blocked.
+const PRINTER_NAME_REGEX = /^[a-zA-Z0-9_.() -]{1,64}$/;
 const PRINT_MEDIA_REGEX = /^[a-zA-Z0-9x]{1,16}$/;
 
 function defaultExecFileImpl(cmd, args) {
