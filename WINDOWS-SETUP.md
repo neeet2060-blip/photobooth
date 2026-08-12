@@ -51,6 +51,13 @@ GitHub 계정 로그인 창이 뜨면(private repo라 인증 필요) `neeet2060-
 - `secrets/firebase-admin.json` (QR 사진 클라우드 배송용)
 - `secrets/tok2026-firebase-admin.json` (TOK2026 결제 연동용)
 
+그리고 새 PC에서 직접 만들어야 하는 파일 하나 더(2026-08-11 추가, 관리자 화면 비밀번호 보호):
+
+- `secrets/admin-password.txt` — 한 줄짜리 평문 비밀번호 파일. 이게 없으면 `/admin` 화면과
+  `/api/admin/*`가 전부 막힌다(비밀번호 미설정 시 열어주는 게 아니라 완전 차단하도록 일부러
+  그렇게 만듦). 아무 편집기로 원하는 비밀번호 한 줄 적어서 저장하면 됨(줄바꿈 앞뒤 공백은
+  자동으로 제거됨). 이 값을 `/admin` 화면 첫 접속 때 브라우저가 물어본다.
+
 새 PC에서: `C:\photobooth\secrets\` 폴더 안에 위 두 파일을 그대로 넣으면 된다(폴더 자체는
 이미 git에 `.gitkeep`으로 존재).
 

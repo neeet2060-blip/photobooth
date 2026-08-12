@@ -192,6 +192,8 @@ function freshRoutes() {
   routes = require('../server/routes');
   // eslint-disable-next-line global-require
   cloudModule = require('../server/cloud');
+  // eslint-disable-next-line global-require
+  require('../server/adminAuth')._setPasswordForTests('test-admin-password');
   return routes;
 }
 
@@ -334,9 +336,19 @@ async function withTestApp(fn) {
   });
   const server = await startTestServer(app);
   const { port } = server.address();
+  // Scoped fetch wrapper (2026-08-11, admin-route password gate) — every
+  // /api/admin/* test call in this file goes through the base fetch without
+  // individually setting the header, so it's simpler to inject it here once
+  // than touch every call site; restored in finally regardless of outcome.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (url, opts = {}) => realFetch(url, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'X-Admin-Password': 'test-admin-password' },
+  });
   try {
     await fn(`http://127.0.0.1:${port}`);
   } finally {
+    globalThis.fetch = realFetch;
     await stopTestServer(server);
   }
 }

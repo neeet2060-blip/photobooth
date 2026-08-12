@@ -14,6 +14,7 @@ const { PRINTER_NAME_REGEX, PRINT_MEDIA_REGEX } = require('./printer');
 const cloud = require('./cloud');
 const tokPayment = require('./tokPayment');
 const { LAYOUTS } = require('./layouts');
+const { requireAdmin } = require('./adminAuth');
 
 const TOKEN_REGEX = /^[a-f0-9]{24}$/;
 
@@ -310,11 +311,11 @@ function registerRoutes(app, deps) {
 
   // ---- Admin: frames ----
 
-  app.get('/api/admin/frames', (req, res) => {
+  app.get('/api/admin/frames', requireAdmin, (req, res) => {
     res.json({ ok: true, frames: store.readFrames() });
   });
 
-  app.post('/api/admin/frames', frameUpload.single('file'), (req, res) => {
+  app.post('/api/admin/frames', requireAdmin, frameUpload.single('file'), (req, res) => {
     if (!req.file) {
       return res.status(400).json({ ok: false, error: 'missing_file' });
     }
@@ -344,7 +345,7 @@ function registerRoutes(app, deps) {
     res.json({ ok: true, frames: next });
   });
 
-  app.post('/api/admin/frames/:id', (req, res) => {
+  app.post('/api/admin/frames/:id', requireAdmin, (req, res) => {
     const { id } = req.params;
     if (!FRAME_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -377,7 +378,7 @@ function registerRoutes(app, deps) {
     return res.json({ ok: true, frames: written });
   });
 
-  app.delete('/api/admin/frames/:id', (req, res) => {
+  app.delete('/api/admin/frames/:id', requireAdmin, (req, res) => {
     const { id } = req.params;
     if (!FRAME_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -398,11 +399,11 @@ function registerRoutes(app, deps) {
 
   // ---- Admin: settings ----
 
-  app.get('/api/admin/settings', (req, res) => {
+  app.get('/api/admin/settings', requireAdmin, (req, res) => {
     res.json({ ok: true, settings: store.readSettings() });
   });
 
-  app.post('/api/admin/settings', (req, res) => {
+  app.post('/api/admin/settings', requireAdmin, (req, res) => {
     const body = req.body || {};
     const current = store.readSettings();
     const next = { ...current };
@@ -506,7 +507,7 @@ function registerRoutes(app, deps) {
   // Never include credential paths, key contents, or any other secret value
   // here — this is purely operational visibility (is it on, what bucket,
   // how many photos went out each way).
-  app.get('/api/admin/cloud', (req, res) => {
+  app.get('/api/admin/cloud', requireAdmin, (req, res) => {
     const settings = store.readSettings();
     const enabled = cloud.isCloudEnabled();
     const tokensSnapshot = store.readJsonFile(TOKENS_FILE, {});
@@ -531,7 +532,7 @@ function registerRoutes(app, deps) {
 
   // ---- Admin: stats ----
 
-  app.get('/api/admin/stats', (req, res) => {
+  app.get('/api/admin/stats', requireAdmin, (req, res) => {
     const stats = store.readStats();
     const completionRate = stats.sessionsStarted > 0
       ? Math.round((stats.sessionsCompleted / stats.sessionsStarted) * 1000) / 10
@@ -543,11 +544,11 @@ function registerRoutes(app, deps) {
 
   const PRINT_JOB_ID_REGEX = /^[a-z0-9]{1,40}$/;
 
-  app.get('/api/admin/printqueue', (req, res) => {
+  app.get('/api/admin/printqueue', requireAdmin, (req, res) => {
     res.json({ ok: true, jobs: printqueue.getQueueSnapshot() });
   });
 
-  app.post('/api/admin/printqueue/:id/retry', (req, res) => {
+  app.post('/api/admin/printqueue/:id/retry', requireAdmin, (req, res) => {
     const { id } = req.params;
     if (!PRINT_JOB_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -559,7 +560,7 @@ function registerRoutes(app, deps) {
     return res.json({ ok: true, job });
   });
 
-  app.post('/api/admin/printqueue/:id/cancel', (req, res) => {
+  app.post('/api/admin/printqueue/:id/cancel', requireAdmin, (req, res) => {
     const { id } = req.params;
     if (!PRINT_JOB_ID_REGEX.test(id)) {
       return res.status(400).json({ ok: false, error: 'invalid_id' });
@@ -578,7 +579,7 @@ function registerRoutes(app, deps) {
   // payment. A failed print is an operational/printer problem, not a
   // refund, so it still counts as revenue. Only 'canceled' jobs (which can
   // only happen while still 'queued', i.e. never printed) are excluded.
-  app.get('/api/admin/printsettlement', (req, res) => {
+  app.get('/api/admin/printsettlement', requireAdmin, (req, res) => {
     const jobs = printqueue.getQueueSnapshot().filter((j) => j.status !== 'canceled');
 
     let totalPrintsSold = 0;

@@ -1,5 +1,22 @@
 import { t, mountLangToggle } from '../shared/i18n.js';
 
+// Password gate for /api/admin/* (2026-08-11 pre-launch audit fix, server
+// side: server/adminAuth.js). sessionStorage (not localStorage) so the
+// password doesn't linger on the machine past this browser tab's lifetime.
+// On 401 (wrong/missing password) or 503 (server has no password
+// configured at all), prompt once and retry with whatever was entered.
+const ADMIN_PW_KEY = 'photobooth_admin_pw';
+
+async function adminFetch(url, opts = {}) {
+  const password = sessionStorage.getItem(ADMIN_PW_KEY) || '';
+  const res = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), 'X-Admin-Password': password } });
+  if (res.status !== 401 && res.status !== 503) return res;
+  const message = res.status === 503 ? t('adminPasswordNotConfiguredMsg') : t('adminPasswordPromptMsg');
+  const entered = window.prompt(message) || '';
+  sessionStorage.setItem(ADMIN_PW_KEY, entered);
+  return fetch(url, { ...opts, headers: { ...(opts.headers || {}), 'X-Admin-Password': entered } });
+}
+
 mountLangToggle(document.body, () => {
   applyStaticLabels();
 });
@@ -53,7 +70,7 @@ applyStaticLabels();
 // ---- Frames panel ----
 
 async function loadFrames() {
-  const res = await fetch('/api/admin/frames');
+  const res = await adminFetch('/api/admin/frames');
   const data = await res.json();
   renderFrameList(data.frames || []);
 }
@@ -101,7 +118,7 @@ function renderFrameList(frames) {
 }
 
 async function updateFrame(id, patch) {
-  await fetch(`/api/admin/frames/${id}`, {
+  await adminFetch(`/api/admin/frames/${id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -110,7 +127,7 @@ async function updateFrame(id, patch) {
 }
 
 async function deleteFrame(id) {
-  await fetch(`/api/admin/frames/${id}`, { method: 'DELETE' });
+  await adminFetch(`/api/admin/frames/${id}`, { method: 'DELETE' });
   loadFrames();
 }
 
@@ -127,7 +144,7 @@ document.getElementById('frame-upload-btn').addEventListener('click', async () =
   formData.append('name', name || 'Untitled');
   formData.append('layout', layout);
   formData.append('file', file);
-  const res = await fetch('/api/admin/frames', { method: 'POST', body: formData });
+  const res = await adminFetch('/api/admin/frames', { method: 'POST', body: formData });
   if (res.ok) {
     document.getElementById('frame-name').value = '';
     fileInput.value = '';
@@ -155,7 +172,7 @@ const SETTINGS_FIELDS = [
 ];
 
 async function loadSettings() {
-  const res = await fetch('/api/admin/settings');
+  const res = await adminFetch('/api/admin/settings');
   const data = await res.json();
   renderSettingsForm(data.settings || {});
 }
@@ -203,7 +220,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
   inputs.forEach((input) => {
     payload[input.dataset.key] = input.value;
   });
-  const res = await fetch('/api/admin/settings', {
+  const res = await adminFetch('/api/admin/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -218,7 +235,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
 // ---- Stats panel ----
 
 async function loadStats() {
-  const res = await fetch('/api/admin/stats');
+  const res = await adminFetch('/api/admin/stats');
   const data = await res.json();
   renderStats(data.stats || {});
 }
@@ -277,7 +294,7 @@ const PRINT_SETTINGS_FIELDS = [
 ];
 
 async function loadPrintSettings() {
-  const res = await fetch('/api/admin/settings');
+  const res = await adminFetch('/api/admin/settings');
   const data = await res.json();
   renderPrintSettingsForm(data.settings || {});
 }
@@ -343,7 +360,7 @@ document.getElementById('print-settings-save-btn').addEventListener('click', asy
       payload[input.dataset.key] = input.value;
     }
   });
-  const res = await fetch('/api/admin/settings', {
+  const res = await adminFetch('/api/admin/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -370,7 +387,7 @@ function ensurePrintQueueSocket() {
 
 async function loadPrintQueue() {
   ensurePrintQueueSocket();
-  const res = await fetch('/api/admin/printqueue');
+  const res = await adminFetch('/api/admin/printqueue');
   const data = await res.json();
   renderPrintQueue(data.jobs || []);
 }
@@ -414,19 +431,19 @@ function renderPrintQueue(jobs) {
 }
 
 async function retryPrintJob(id) {
-  await fetch(`/api/admin/printqueue/${id}/retry`, { method: 'POST' });
+  await adminFetch(`/api/admin/printqueue/${id}/retry`, { method: 'POST' });
   loadPrintQueue();
 }
 
 async function cancelPrintJob(id) {
-  await fetch(`/api/admin/printqueue/${id}/cancel`, { method: 'POST' });
+  await adminFetch(`/api/admin/printqueue/${id}/cancel`, { method: 'POST' });
   loadPrintQueue();
 }
 
 // ---- Print settlement panel ----
 
 async function loadPrintSettlement() {
-  const res = await fetch('/api/admin/printsettlement');
+  const res = await adminFetch('/api/admin/printsettlement');
   const data = await res.json();
   renderPrintSettlement(data);
 }
@@ -520,7 +537,7 @@ function printStatusLabel(job) {
 // ---- Cloud delivery status panel (read-only) ----
 
 async function loadCloudStatus() {
-  const res = await fetch('/api/admin/cloud');
+  const res = await adminFetch('/api/admin/cloud');
   const data = await res.json();
   renderCloudStatus(data);
 }

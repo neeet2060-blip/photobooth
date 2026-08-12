@@ -118,6 +118,8 @@ const DICT = {
     filterVivid: '선명하게',
     errorGeneric: '오류가 발생했습니다',
     composeFailedMsg: '사진 합성에 실패했습니다. 잠시 후 다시 시도해주세요.',
+    adminPasswordPromptMsg: '관리자 비밀번호를 입력하세요',
+    adminPasswordNotConfiguredMsg: '서버에 관리자 비밀번호가 설정되지 않았습니다. secrets/admin-password.txt를 만들어주세요.',
   },
   en: {
     appName: 'Photobooth',
