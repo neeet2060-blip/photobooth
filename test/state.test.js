@@ -190,6 +190,37 @@ test('photoRecorded: rejected outside capture phase', () => {
   assert.equal(state.error, 'invalid_action');
 });
 
+// 2026-08-11 pre-launch audit: this reducer is reachable directly via the
+// Socket.IO 'action' passthrough (server/index.js), bypassing routes.js's
+// HTTP-layer index/duplicate checks entirely — so those checks must also
+// live here to be authoritative regardless of entry point.
+test('photoRecorded: rejects an out-of-bounds index (>= shotsTotal)', () => {
+  const state = toCapture(); // shotsTotal = 4
+  const { state: next } = run(state, 'photoRecorded', { index: 4, file: '/x.jpg' });
+  assert.equal(next.error, 'invalid_index');
+  assert.equal(next.photos.length, 0);
+});
+
+test('photoRecorded: rejects a negative or non-integer index', () => {
+  const state = toCapture();
+  assert.equal(run(state, 'photoRecorded', { index: -1 }).state.error, 'invalid_index');
+  assert.equal(run(state, 'photoRecorded', { index: 1.5 }).state.error, 'invalid_index');
+});
+
+test('photoRecorded: rejects a duplicate index', () => {
+  let state = toCapture();
+  state = run(state, 'photoRecorded', { index: 0, file: '/x.jpg' }).state;
+  const { state: next } = run(state, 'photoRecorded', { index: 0, file: '/y.jpg' });
+  assert.equal(next.error, 'index_already_used');
+  assert.equal(next.photos.length, 1);
+});
+
+test('photoRecorded: derives file from sessionId/index, ignoring any payload.file', () => {
+  const state = toCapture();
+  const { state: next } = run(state, 'photoRecorded', { index: 0, file: '/attacker-supplied.jpg' });
+  assert.equal(next.photos[0].file, `/photos/${state.sessionId}/0.jpg`);
+});
+
 test('finishEarly: requires at least 4 photos', () => {
   let state = toCapture();
   state = run(state, 'photoRecorded', { index: 0, file: '/0.jpg' }).state;
@@ -423,6 +454,40 @@ test('chooseTheme: printingEnabled true -> quantity phase, defaults printOrder q
   const state = toQuantity();
   assert.equal(state.phase, PHASES.QUANTITY);
   assert.deepEqual(state.printOrder, { quantity: 1 });
+});
+
+// 2026-08-11 pre-launch audit finding: finishEarly allows moving to SELECT
+// with as few as MIN_PHOTOS_FOR_EARLY_FINISH (4) photos, which can be fewer
+// than shotsTotal. Before this fix, changeTheme -> chooseTheme from there
+// re-entered the QUANTITY/PAYMENT branch a second time for an
+// already-paid session, letting tokPayment.js create an independent second
+// paid order. qrPaid (set once by confirmPrintPayment) must short-circuit
+// straight to CAPTURE instead.
+test('chooseTheme: after finishEarly with shotsTaken < shotsTotal, re-entering via changeTheme does not re-charge (qrPaid short-circuits to capture)', () => {
+  const bigCtx = { settings: { ...PRINTING_SETTINGS, shotsTotal: 8 }, frames: FRAMES };
+  let state = applyAction(createInitialState(), { type: 'start' }, bigCtx).state;
+  state = applyAction(state, { type: 'agree' }, bigCtx).state;
+  state = applyAction(state, { type: 'chooseFormat', payload: { layoutId: 'strip' } }, bigCtx).state;
+  state = applyAction(state, { type: 'chooseTheme', payload: { frameId: 'frame-a' } }, bigCtx).state;
+  assert.equal(state.phase, PHASES.QUANTITY);
+  state = applyAction(state, { type: 'confirmPrintQuantity' }, bigCtx).state;
+  state = applyAction(state, { type: 'choosePaymentMethod', payload: { method: 'cash' } }, bigCtx).state;
+  state = applyAction(state, { type: 'confirmPrintPayment' }, bigCtx).state;
+  assert.equal(state.phase, PHASES.CAPTURE);
+  assert.equal(state.qrPaid, true);
+
+  for (let i = 0; i < 4; i += 1) {
+    state = applyAction(state, { type: 'photoRecorded', payload: { index: i } }, bigCtx).state;
+  }
+  assert.equal(state.shotsTaken, 4);
+  state = applyAction(state, { type: 'finishEarly' }, bigCtx).state;
+  assert.equal(state.phase, PHASES.SELECT);
+  state = applyAction(state, { type: 'changeTheme' }, bigCtx).state;
+  assert.equal(state.phase, PHASES.THEME);
+
+  const { state: next } = applyAction(state, { type: 'chooseTheme', payload: { frameId: 'frame-a' } }, bigCtx);
+  assert.equal(next.phase, PHASES.CAPTURE);
+  assert.equal(next.printOrder, null);
 });
 
 test('setPrintQuantity: rejected outside quantity phase', () => {

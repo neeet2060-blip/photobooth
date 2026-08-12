@@ -211,8 +211,19 @@ function applyAction(state, action, context) {
       // straight to capture, same as before this feature existed.
       let nextPhase;
       let printOrder = state.printOrder;
+      // 2026-08-11 pre-launch audit finding: finishEarly allows moving to
+      // SELECT with as few as MIN_PHOTOS_FOR_EARLY_FINISH photos, which can
+      // be fewer than shotsTotal — so changeTheme from there re-entered this
+      // reducer with shotsTaken < shotsTotal, and (before this check) fell
+      // through to the QUANTITY/PAYMENT branch below a second time, letting
+      // tokPayment.js create an independent second paid order for a session
+      // that already paid once. qrPaid is only ever set by a completed
+      // confirmPrintPayment this session, so treat it the same as "already
+      // had enough shots" — never charge a session twice.
       if (state.shotsTaken >= shotsTotal) {
         nextPhase = PHASES.SELECT;
+      } else if (state.qrPaid) {
+        nextPhase = PHASES.CAPTURE;
       } else if (settings.printingEnabled || settings.qrRequiresPayment) {
         // qrRequiresPayment alone (printingEnabled off) still needs a
         // payment step for the QR itself — printOrder.quantity starts at 0
@@ -341,7 +352,22 @@ function applyAction(state, action, context) {
       if (state.phase !== PHASES.CAPTURE) {
         return { state: withError(state, 'invalid_action'), effects };
       }
-      const { index, file } = payload;
+      // index/file were previously trusted from payload with no validation
+      // here — server/routes.js's HTTP route checked bounds/duplicates
+      // before dispatching, but this reducer is also reachable directly via
+      // the Socket.IO 'action' passthrough (server/index.js), which bypasses
+      // that route entirely (2026-08-11 pre-launch audit finding). Both
+      // checks and the file path now live here so there's one authoritative
+      // gate regardless of entry point; file is always derived, never
+      // trusted from the caller.
+      const { index } = payload;
+      if (!Number.isInteger(index) || index < 0 || index >= state.shotsTotal) {
+        return { state: withError(state, 'invalid_index'), effects };
+      }
+      if (state.photos.some((p) => p.index === index)) {
+        return { state: withError(state, 'index_already_used'), effects };
+      }
+      const file = `/photos/${state.sessionId}/${index}.jpg`;
       const photos = [...state.photos, { index, file, takenAt: Date.now() }];
       const shotsTaken = photos.length;
       const donePhase = shotsTaken >= state.shotsTotal ? PHASES.SELECT : PHASES.CAPTURE;

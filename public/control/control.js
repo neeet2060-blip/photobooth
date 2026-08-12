@@ -172,7 +172,11 @@ function renderFormat() {
       ]),
     );
   }
-  return el('div', { class: 'screen' }, [el('h1', {}, t('formatTitle')), grid]);
+  return el('div', { class: 'screen' }, [
+    el('h1', {}, t('formatTitle')),
+    grid,
+    el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
+  ]);
 }
 
 function renderTheme(state) {
@@ -185,7 +189,11 @@ function renderTheme(state) {
       ]),
     );
   }
-  return el('div', { class: 'screen' }, [el('h1', {}, t('themeTitle')), grid]);
+  return el('div', { class: 'screen' }, [
+    el('h1', {}, t('themeTitle')),
+    grid,
+    el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
+  ]);
 }
 
 function renderCapture(state) {
@@ -281,8 +289,19 @@ function renderFilter(state) {
   const chips = el('div', { class: 'filter-chips' });
   const filters = filtersCache.length ? filtersCache : [{ id: 'none', css: 'none' }];
 
+  // 2026-08-11 pre-launch audit finding: composeFrame() is async (loads 4
+  // photos + the frame image) and its failure/still-pending state was never
+  // surfaced — the confirm button stayed clickable throughout, so a slow
+  // load or a failed image (404, CORS) could submit a black/partial canvas
+  // as the customer's permanent final photo with no error to anyone. The
+  // button now starts disabled and only re-enables once a composite
+  // actually finishes successfully; a failure keeps it disabled and alerts
+  // instead of silently letting a bad photo through.
+  let composeReady = false;
   const redraw = () => {
     if (!frame) return;
+    composeReady = false;
+    confirmBtn.disabled = true;
     const activeFilter = filters.find((f) => f.id === state.filterId) || filters[0];
     composeFrame({
       canvas,
@@ -290,7 +309,12 @@ function renderFilter(state) {
       photoUrls: orderedPhotoUrls,
       frameUrl: frame.file,
       filterCss: activeFilter.css,
-    }).catch(() => {});
+    }).then(() => {
+      composeReady = true;
+      confirmBtn.disabled = false;
+    }).catch(() => {
+      alert(t('composeFailedMsg'));
+    });
   };
 
   for (const filterDef of filters) {
@@ -308,7 +332,7 @@ function renderFilter(state) {
 
   const confirmBtn = el(
     'button',
-    { class: 'primary big-button' },
+    { class: 'primary big-button', disabled: 'disabled' },
     t('confirmFinalButton'),
   );
   confirmBtn.addEventListener('click', async () => {
@@ -425,42 +449,64 @@ function renderQuantity(state) {
   const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
   const qrRequiresPayment = Boolean(printSettingsCache && printSettingsCache.qrRequiresPayment);
   const qrUnitPriceCents = (printSettingsCache && printSettingsCache.qrUnitPriceCents) || 0;
+  const printingEnabled = Boolean(printSettingsCache && printSettingsCache.printingEnabled);
 
   if (quantityScreenStep === 'choose') {
     const qrPriceLabel = qrRequiresPayment ? formatEuros(qrUnitPriceCents) : t('quantityFreeLabel');
     const printPriceLabel = printSettingsCache
       ? t('quantityChoicePrintFrom', { price: formatEuros(totalCentsFor(MIN_PRINT_QUANTITY, printSettingsCache)) })
       : '';
+    // 2026-08-11 pre-launch audit findings:
+    // - The QR card was always shown labeled "무료" (free) and always sent
+    //   quantity:0 — but the server only accepts quantity:0 when
+    //   qrRequiresPayment is on (state.js's setPrintQuantity). With
+    //   qrRequiresPayment off, that request was silently rejected and
+    //   printOrder.quantity stayed at whatever it already was (1, once
+    //   printingEnabled is on) — so confirmPrintQuantity right after it
+    //   landed the customer on a real, unwanted print charge instead of the
+    //   "free" QR they tapped. When qrRequiresPayment is off, the QR is
+    //   delivered unconditionally regardless of this screen (see state.js's
+    //   printOrder/qrPaid comments), so this card has nothing to offer in
+    //   that config — only show it when qrRequiresPayment is genuinely on.
+    // - The print card was always shown even when printingEnabled was off,
+    //   letting a customer pay for prints the booth can no longer produce
+    //   (e.g. printer taken offline mid-event). Only show it when enabled.
+    // chooseTheme only ever routes here when printingEnabled||qrRequiresPayment,
+    // so at least one of the two is always true — never a dead end.
+    const cards = [];
+    if (qrRequiresPayment) {
+      cards.push(el(
+        'button',
+        {
+          class: 'choice-card',
+          onclick: () => {
+            // QR만 — 매수 조정 화면 없이 곧장 0으로 확정하고 결제로 진행.
+            sendAction('setPrintQuantity', { quantity: 0 });
+            sendAction('confirmPrintQuantity');
+          },
+        },
+        [el('div', {}, t('quantityChoiceQr')), el('div', {}, qrPriceLabel)],
+      ));
+    }
+    if (printingEnabled) {
+      cards.push(el(
+        'button',
+        {
+          class: 'choice-card',
+          onclick: () => {
+            if (!printOrder || printOrder.quantity < MIN_PRINT_QUANTITY) {
+              sendAction('setPrintQuantity', { quantity: MIN_PRINT_QUANTITY });
+            }
+            quantityScreenStep = 'count';
+            render(lastState);
+          },
+        },
+        [el('div', {}, t('quantityChoicePrint')), el('div', {}, printPriceLabel)],
+      ));
+    }
     return el('div', { class: 'screen' }, [
       el('h1', {}, t('quantityChoiceTitle')),
-      el('div', { style: 'display:flex;gap:16px;justify-content:center;flex-wrap:wrap;' }, [
-        el(
-          'button',
-          {
-            class: 'choice-card',
-            onclick: () => {
-              // QR만 — 매수 조정 화면 없이 곧장 0으로 확정하고 결제로 진행.
-              sendAction('setPrintQuantity', { quantity: 0 });
-              sendAction('confirmPrintQuantity');
-            },
-          },
-          [el('div', {}, t('quantityChoiceQr')), el('div', {}, qrPriceLabel)],
-        ),
-        el(
-          'button',
-          {
-            class: 'choice-card',
-            onclick: () => {
-              if (!printOrder || printOrder.quantity < MIN_PRINT_QUANTITY) {
-                sendAction('setPrintQuantity', { quantity: MIN_PRINT_QUANTITY });
-              }
-              quantityScreenStep = 'count';
-              render(lastState);
-            },
-          },
-          [el('div', {}, t('quantityChoicePrint')), el('div', {}, printPriceLabel)],
-        ),
-      ]),
+      el('div', { style: 'display:flex;gap:16px;justify-content:center;flex-wrap:wrap;' }, cards),
       el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
         el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
       ]),
@@ -533,17 +579,29 @@ let paymentConfirmedSessionId = null;
 // there no auto-confirm to wait for, so this falls back to the
 // pre-integration behavior of dispatching confirmPrintPayment immediately.
 async function handlePaymentConfirm(state) {
-  let bridgeEnabled = false;
+  // 2026-08-11 pre-launch audit finding: previously, ANY fetch failure
+  // (a transient network blip, not just "bridge genuinely not configured")
+  // fell through to the same instant-confirm-for-free branch as a real
+  // disabled bridge — a momentary Wi-Fi hiccup at the exact moment staff
+  // clicked confirm would mark the order paid with no actual payment
+  // confirmation from TOK2026. Distinguish the two: only a successful check
+  // that comes back {enabled:false} counts as "no bridge, confirm locally."
+  // A failed check is 'unknown' and must never silently confirm.
+  let status; // 'enabled' | 'disabled' | 'unknown'
   try {
     const res = await fetch('/api/tok-payment-status');
     const data = await res.json();
-    bridgeEnabled = Boolean(data && data.enabled);
+    status = (data && data.enabled) ? 'enabled' : 'disabled';
   } catch (err) {
-    // Network hiccup — treat as disabled, same as the fetch failing to
-    // resolve any config: fall back rather than leave the visitor stuck.
+    status = 'unknown';
   }
 
-  if (!bridgeEnabled) {
+  if (status === 'unknown') {
+    alert(t('paymentStatusCheckFailedMsg'));
+    return;
+  }
+
+  if (status === 'disabled') {
     sendAction('confirmPrintPayment');
     return;
   }

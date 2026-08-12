@@ -218,7 +218,16 @@ setInterval(() => {
     return;
   }
 
-  if (sessionState.phase !== stateMachine.PHASES.IDLE) {
+  // PAYMENT is excluded (2026-08-11 pre-launch audit finding) — a customer
+  // waiting on TOK2026 to confirm cash/card payment can legitimately take
+  // longer than idleTimeoutSec (staff walking over, a busy moment at the
+  // booth), and updatedAt only advances on a new dispatch — the background
+  // poll ticking every 4s doesn't touch it. Force-resetting here orphans
+  // the Firestore order and stops tokPayment.js's poll with no recovery
+  // path (the exact failure mode SESSION-PERSISTENCE.md was written for,
+  // just triggered by a timeout instead of a process restart). The payment
+  // screen already has a manual "취소" button for genuine abandonment.
+  if (sessionState.phase !== stateMachine.PHASES.IDLE && sessionState.phase !== stateMachine.PHASES.PAYMENT) {
     if (elapsedSec > settings.idleTimeoutSec) {
       dispatch({ type: 'forceReset' });
     }
@@ -304,7 +313,13 @@ sweepExpiredCloudTokens();
 // ---- Startup ----
 
 httpsServer.listen(HTTPS_PORT, () => {
-  httpServer.listen(HTTP_PORT, () => {
+  // Bound to loopback only (2026-08-11 pre-launch audit finding) — the
+  // comment above httpServer's construction always intended this port for
+  // "the server laptop itself," but listen() with no host argument binds
+  // 0.0.0.0 by default, so the entire unauthenticated app (admin routes,
+  // the Socket.IO action channel) was reachable over plain HTTP from any
+  // device on the venue LAN, no self-signed-cert click-through needed.
+  httpServer.listen(HTTP_PORT, '127.0.0.1', () => {
     printStartupBanner();
   });
 });

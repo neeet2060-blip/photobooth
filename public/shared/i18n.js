@@ -38,6 +38,7 @@ const DICT = {
     paymentCreatedAtLabel: '접수 시각: {time}',
     paymentAwaiting: '결제를 진행해주세요',
     paymentAwaitingStaffConfirm: '직원이 결제를 확인하면 자동으로 다음 단계로 넘어갑니다',
+    paymentStatusCheckFailedMsg: '네트워크 오류로 결제 상태를 확인하지 못했습니다. 잠시 후 다시 눌러주세요.',
     paymentBackButton: '수량 다시 선택',
     paymentConfirmButton: '결제 확인 (직원용)',
     captureTitle: '촬영 중',
@@ -116,6 +117,7 @@ const DICT = {
     filterVintage: '빈티지',
     filterVivid: '선명하게',
     errorGeneric: '오류가 발생했습니다',
+    composeFailedMsg: '사진 합성에 실패했습니다. 잠시 후 다시 시도해주세요.',
   },
   en: {
     appName: 'Photobooth',
@@ -152,6 +154,7 @@ const DICT = {
     paymentCreatedAtLabel: 'Started at: {time}',
     paymentAwaiting: 'Please complete payment',
     paymentAwaitingStaffConfirm: 'Once staff confirm the payment, this will move on automatically',
+    paymentStatusCheckFailedMsg: 'Could not check payment status due to a network error. Please try again shortly.',
     paymentBackButton: 'Change quantity',
     paymentConfirmButton: 'Confirm payment (staff)',
     captureTitle: 'Taking photos',
@@ -230,6 +233,7 @@ const DICT = {
     filterVintage: 'Vintage',
     filterVivid: 'Vivid',
     errorGeneric: 'Something went wrong',
+    composeFailedMsg: 'Failed to compose the photo. Please try again shortly.',
   },
   de: {
     appName: 'Fotobox',
@@ -266,6 +270,7 @@ const DICT = {
     paymentCreatedAtLabel: 'Begonnen um: {time}',
     paymentAwaiting: 'Bitte Zahlung abschließen',
     paymentAwaitingStaffConfirm: 'Sobald das Personal die Zahlung bestätigt, geht es automatisch weiter',
+    paymentStatusCheckFailedMsg: 'Der Zahlungsstatus konnte aufgrund eines Netzwerkfehlers nicht geprüft werden. Bitte versuchen Sie es in Kürze erneut.',
     paymentBackButton: 'Menge ändern',
     paymentConfirmButton: 'Zahlung bestätigen (Personal)',
     captureTitle: 'Fotos werden aufgenommen',
@@ -344,6 +349,7 @@ const DICT = {
     filterVintage: 'Vintage',
     filterVivid: 'Lebendig',
     errorGeneric: 'Etwas ist schiefgelaufen',
+    composeFailedMsg: 'Das Zusammenstellen des Fotos ist fehlgeschlagen. Bitte versuchen Sie es in Kürze erneut.',
   },
 };
 
