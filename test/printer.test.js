@@ -60,7 +60,7 @@ test('cups mode builds the correct argv array and invokes the injected exec func
   assert.deepEqual(calls[0].args, ['-d', 'MyPrinter_1', '-n', '3', '-o', 'media=4x6', '-o', 'fit-to-page', srcFile]);
 });
 
-test('windows mode invokes powershell.exe with the file/printerName/copies as trailing positional args', async () => {
+test('windows mode invokes powershell.exe with a parameterized script and trailing file/printerName/copies args', async () => {
   const calls = [];
   const execFileImpl = async (cmd, args) => {
     calls.push({ cmd, args });
@@ -76,11 +76,12 @@ test('windows mode invokes powershell.exe with the file/printerName/copies as tr
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].cmd, 'powershell.exe');
-  // The trailing three args (file, printerName, copies) are the untrusted
-  // values — everything before them is the fixed script text.
+  // The trailing three args are parameters for the fixed .ps1 file — never
+  // interpolated into PowerShell source code.
   const args = calls[0].args;
   assert.deepEqual(args.slice(-3), [srcFile, 'DNP_DS620', '2']);
   assert.ok(args.includes('-NoProfile'));
+  assert.equal(args[args.indexOf('-File') + 1], path.join(__dirname, '..', 'server', 'print-windows.ps1'));
 });
 
 test('windows mode accepts a real Windows printer name containing spaces and parentheses', async () => {
