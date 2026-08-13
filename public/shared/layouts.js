@@ -64,6 +64,15 @@ const CARD_B_SLOTS = [
   { x: 520, y: 865, w: 441, h: 504 },
 ];
 
+// grid2c: Taste of Korea 2026 blue 2x2 frame. Keep in sync with
+// server/layouts.js.
+const CARD_C_SLOTS = [
+  { x: 67, y: 169, w: 387, h: 542 },
+  { x: 569, y: 169, w: 389, h: 542 },
+  { x: 67, y: 758, w: 387, h: 550 },
+  { x: 569, y: 758, w: 389, h: 550 },
+];
+
 export const LAYOUTS = {
   strip: {
     canvasWidth: STRIP_CANVAS_WIDTH,
@@ -84,6 +93,11 @@ export const LAYOUTS = {
     canvasWidth: CARD_CANVAS_WIDTH,
     canvasHeight: CARD_CANVAS_HEIGHT,
     slots: CARD_B_SLOTS,
+  },
+  grid2c: {
+    canvasWidth: CARD_CANVAS_WIDTH,
+    canvasHeight: CARD_CANVAS_HEIGHT,
+    slots: CARD_C_SLOTS,
   },
 };
 
