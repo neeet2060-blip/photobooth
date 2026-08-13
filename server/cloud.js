@@ -50,6 +50,9 @@ function resolveBucketName() {
 // always build their destination path from PREFIX + a validated token, so
 // this module can never list/read/delete anything outside photobooth/.
 const PREFIX = 'photobooth';
+// Named rather than default, mirroring server/tokPayment.js: the two modules
+// authenticate to different Firebase projects and must never share an app.
+const CLOUD_APP_NAME = 'photobooth-cloud';
 const SIGNED_URL_EXPIRES_MS = 10 * 365 * 24 * 60 * 60 * 1000; // ~10 years out
 
 let cachedBucket = null; // real (lazily-initialized) or injected-for-tests bucket handle
@@ -120,10 +123,20 @@ function getBucket() {
     const admin = require('firebase-admin');
     // eslint-disable-next-line global-require
     const { getStorage } = require('firebase-admin/storage');
-    const app = admin.getApps().length ? admin.getApp() : admin.initializeApp({
+    // Look this module's own app up BY NAME. The obvious-looking
+    // `getApps().length ? getApp() : initializeApp(...)` is wrong here and
+    // silently disabled cloud delivery for the whole 2026-08 event run:
+    // server/tokPayment.js registers a *named* app for a different Firebase
+    // project, so as soon as payment is configured getApps() is non-empty,
+    // the ternary takes the getApp() branch, and getApp() — which returns the
+    // DEFAULT app — throws "The default Firebase app does not exist". The
+    // catch below then turned that into a quiet "cloud disabled", so QR codes
+    // fell back to the LAN URL with nothing but a console warning.
+    const existing = admin.getApps().find((a) => a.name === CLOUD_APP_NAME);
+    const app = existing || admin.initializeApp({
       credential: admin.cert(credentials),
       storageBucket: bucketName,
-    });
+    }, CLOUD_APP_NAME);
     cachedBucket = getStorage(app).bucket(bucketName);
     return cachedBucket;
   } catch (err) {
