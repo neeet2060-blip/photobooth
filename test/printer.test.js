@@ -186,3 +186,94 @@ test('SECURITY: malicious media value ($(whoami)) is rejected before execFile', 
 
   assert.equal(calls.length, 0);
 });
+
+// ---- ipp mode (Canon SELPHY CP1500, 2026-08-13) ----
+
+function stubIpp(overrides = {}) {
+  const calls = { getPrinterAttributes: [], discover: 0, printJob: [] };
+  const impl = {
+    parseTarget: require('../server/ipp').parseTarget,
+    acceptsJpeg: require('../server/ipp').acceptsJpeg,
+    readyMedia: require('../server/ipp').readyMedia,
+    async getPrinterAttributes(target) {
+      calls.getPrinterAttributes.push(target);
+      return { 'document-format-supported': ['image/jpeg'], 'media-ready': ['jpn_hagaki_100x148mm'] };
+    },
+    async discover() {
+      calls.discover += 1;
+      return { target: { host: '10.0.0.5', port: 631, path: '/ipp/print' }, media: 'jpn_hagaki_100x148mm' };
+    },
+    async printJob(target, data, opts) {
+      calls.printJob.push({ target, size: data.length, opts });
+      return { jobId: 7, jobState: 'job-printing' };
+    },
+    ...overrides,
+  };
+  return { impl, calls };
+}
+
+test('ipp mode prints to the configured address when it answers', async () => {
+  const { impl, calls } = stubIpp();
+  const result = await printer.printFile(srcFile, {
+    mode: 'ipp', copies: 2, printerUrl: '172.20.10.10', ippImpl: impl,
+  });
+
+  assert.equal(calls.discover, 0, 'no need to go looking when the address works');
+  assert.equal(calls.printJob.length, 1);
+  assert.equal(calls.printJob[0].target.host, '172.20.10.10');
+  assert.equal(calls.printJob[0].opts.copies, 2);
+  assert.equal(result.discovered, false);
+  assert.equal(result.jobState, 'job-printing');
+});
+
+test('ipp mode uses the paper the printer reports as loaded', async () => {
+  const { impl, calls } = stubIpp();
+  await printer.printFile(srcFile, { mode: 'ipp', copies: 1, printerUrl: '172.20.10.10', ippImpl: impl });
+  assert.equal(calls.printJob[0].opts.media, 'jpn_hagaki_100x148mm');
+});
+
+test('ipp mode falls back to discovery when the configured address has gone stale', async () => {
+  // The venue runs on a phone hotspot, which hands the printer a different
+  // address every restart — a saved address going stale is the normal case,
+  // not an error worth failing a paid print over.
+  const { impl, calls } = stubIpp({
+    async getPrinterAttributes() { throw new Error('ECONNREFUSED'); },
+  });
+
+  const result = await printer.printFile(srcFile, {
+    mode: 'ipp', copies: 1, printerUrl: '172.20.10.99', ippImpl: impl,
+  });
+
+  assert.equal(calls.discover, 1);
+  assert.equal(calls.printJob[0].target.host, '10.0.0.5');
+  assert.equal(result.discovered, true);
+});
+
+test('ipp mode discovers the printer when no address is configured at all', async () => {
+  const { impl, calls } = stubIpp();
+  const result = await printer.printFile(srcFile, { mode: 'ipp', copies: 1, printerUrl: '', ippImpl: impl });
+  assert.equal(calls.discover, 1);
+  assert.equal(result.discovered, true);
+});
+
+test('ipp mode refuses a printer that cannot take a JPEG rather than sending one blindly', async () => {
+  const { impl, calls } = stubIpp({
+    async getPrinterAttributes() { return { 'document-format-supported': ['image/pwg-raster'] }; },
+    async discover() { calls_discoverNull += 1; return null; },
+  });
+  let calls_discoverNull = 0;
+  await assert.rejects(
+    () => printer.printFile(srcFile, { mode: 'ipp', copies: 1, printerUrl: '172.20.10.10', ippImpl: impl }),
+    /No IPP printer found/,
+  );
+  assert.equal(calls.printJob.length, 0, 'must not send a job to a printer that rejected the format');
+});
+
+test('ipp mode rejects an invalid copies value before reading the file', async () => {
+  const { impl, calls } = stubIpp();
+  await assert.rejects(
+    () => printer.printFile(srcFile, { mode: 'ipp', copies: 0, printerUrl: '172.20.10.10', ippImpl: impl }),
+    /Invalid copies/,
+  );
+  assert.equal(calls.printJob.length, 0);
+});

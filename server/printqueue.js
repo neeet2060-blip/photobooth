@@ -24,7 +24,13 @@ const printer = require('./printer');
 
 const STAGING_DIR = path.join(store.DATA_DIR, 'print-jobs');
 const MAX_ATTEMPTS = 3; // 1 initial try + up to 2 retries
+// Grows per attempt (0.5s, then 4s) rather than staying flat. The printer is
+// reached over the venue's phone hotspot in 'ipp' mode, where a brief Wi-Fi
+// drop or a printer that has just woken is entirely normal — three tries
+// 500ms apart would burn all of them inside a single hiccup and mark a job
+// the visitor already paid for as failed.
 const RETRY_BACKOFF_MS = 500;
+const RETRY_BACKOFF_FACTOR = 8;
 const CURRENCY = 'EUR';
 
 const changeListeners = [];
@@ -162,7 +168,11 @@ async function runJob(jobId) {
       const result = await printer.printFile(job.file, {
         copies: job.quantity,
         printerName: settings.printerName,
-        media: settings.printMedia,
+        printerUrl: settings.printerUrl,
+        // 'ipp' mode reads the paper actually loaded from the printer itself,
+        // so the configured media is only a manual override there; passing it
+        // blindly would let a stale setting outrank the real cassette.
+        media: settings.printMode === 'ipp' ? '' : settings.printMedia,
         mode: settings.printMode,
         jobId: job.id,
         extraOptions: {},
@@ -182,7 +192,7 @@ async function runJob(jobId) {
       });
       if (isLastAttempt) return;
       // eslint-disable-next-line no-await-in-loop
-      await sleep(RETRY_BACKOFF_MS);
+      await sleep(RETRY_BACKOFF_MS * (RETRY_BACKOFF_FACTOR ** attempt));
     }
   }
 }

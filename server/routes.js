@@ -11,6 +11,7 @@ const { PHASES, FILTERS } = require('./state');
 const { getLanIp } = require('./ip');
 const printqueue = require('./printqueue');
 const { PRINTER_NAME_REGEX, PRINT_MEDIA_REGEX } = require('./printer');
+const ipp = require('./ipp');
 const cloud = require('./cloud');
 const tokPayment = require('./tokPayment');
 const { LAYOUTS } = require('./layouts');
@@ -515,10 +516,18 @@ function registerRoutes(app, deps) {
       next.qrUnitPriceCents = num;
     }
     if (body.printMode !== undefined) {
-      if (body.printMode !== 'folder' && body.printMode !== 'cups' && body.printMode !== 'windows') {
+      if (!['folder', 'cups', 'windows', 'ipp'].includes(body.printMode)) {
         return res.status(400).json({ ok: false, error: 'invalid_printMode' });
       }
       next.printMode = body.printMode;
+    }
+    if (body.printerUrl !== undefined) {
+      // Empty is valid and is in fact the recommended setting — it means
+      // "find the printer yourself" (server/ipp.js discover).
+      if (body.printerUrl !== '' && !ipp.parseTarget(body.printerUrl)) {
+        return res.status(400).json({ ok: false, error: 'invalid_printerUrl' });
+      }
+      next.printerUrl = body.printerUrl;
     }
     if (body.printerName !== undefined) {
       if (body.printerName !== '' && !PRINTER_NAME_REGEX.test(body.printerName)) {
