@@ -88,6 +88,37 @@ const CARD_D_SLOTS = [
   { x: 683, y: 961, w: 421, h: 359 },
 ];
 
+// grid2e/grid2f (2026-08-13): the "Taste of Korea" and "PLAY" 2x2 frames,
+// which arrived as a single side-by-side artwork and were split at x=875 (the
+// column where the beige background gives way to the PLAY frame's grey).
+// Slots were measured from each frame's own alpha channel — see grid2d's note
+// on why every frame gets its own entry rather than sharing one coordinate
+// system.
+//
+// Both canvases are ~1.42 tall-to-wide where a 4x6 print sheet is 1.5, so the
+// sheet stretches them ~6% vertically, exactly as grid2d already does. Fine
+// for decorative artwork; a redesign at 1200x1800 would remove it.
+const CARD_E_CANVAS_WIDTH = 875;
+const CARD_E_CANVAS_HEIGHT = 1240;
+const CARD_E_SLOTS = [
+  { x: 28, y: 241, w: 398, h: 397 },
+  { x: 449, y: 241, w: 398, h: 397 },
+  // The bear/tiger sticker sits on top of this window's lower edge, so the
+  // measured transparent run stops early (h=303). The real window matches its
+  // neighbour — using the measured value would letterbox this one photo.
+  { x: 28, y: 662, w: 398, h: 391 },
+  { x: 449, y: 662, w: 398, h: 391 },
+];
+
+const CARD_F_CANVAS_WIDTH = 873;
+const CARD_F_CANVAS_HEIGHT = 1240;
+const CARD_F_SLOTS = [
+  { x: 27, y: 28, w: 398, h: 398 },
+  { x: 448, y: 28, w: 398, h: 398 },
+  { x: 27, y: 449, w: 398, h: 398 },
+  { x: 448, y: 449, w: 398, h: 398 },
+];
+
 export const LAYOUTS = {
   strip: {
     canvasWidth: STRIP_CANVAS_WIDTH,
@@ -118,6 +149,16 @@ export const LAYOUTS = {
     canvasWidth: CARD_D_CANVAS_WIDTH,
     canvasHeight: CARD_D_CANVAS_HEIGHT,
     slots: CARD_D_SLOTS,
+  },
+  grid2e: {
+    canvasWidth: CARD_E_CANVAS_WIDTH,
+    canvasHeight: CARD_E_CANVAS_HEIGHT,
+    slots: CARD_E_SLOTS,
+  },
+  grid2f: {
+    canvasWidth: CARD_F_CANVAS_WIDTH,
+    canvasHeight: CARD_F_CANVAS_HEIGHT,
+    slots: CARD_F_SLOTS,
   },
 };
 
