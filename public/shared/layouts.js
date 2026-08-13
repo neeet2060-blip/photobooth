@@ -73,6 +73,21 @@ const CARD_C_SLOTS = [
   { x: 569, y: 758, w: 389, h: 550 },
 ];
 
+// grid2d: holographic Taste of Korea 2026 2x2 frame (2026-08-13). Native
+// artwork size (1240x1748) instead of CARD_CANVAS_WIDTH/HEIGHT — a hair off
+// exact 2:3, so the print sheet stretches it ~6% vertically (fine for a
+// decorative frame; a future redesign should target exact 2:3, e.g.
+// 1200x1800). Slots measured from the artwork's own alpha channel. Keep in
+// sync with server/layouts.js.
+const CARD_D_CANVAS_WIDTH = 1240;
+const CARD_D_CANVAS_HEIGHT = 1748;
+const CARD_D_SLOTS = [
+  { x: 125, y: 407, w: 429, h: 369 },
+  { x: 672, y: 395, w: 447, h: 390 },
+  { x: 129, y: 966, w: 430, h: 364 },
+  { x: 683, y: 961, w: 421, h: 359 },
+];
+
 export const LAYOUTS = {
   strip: {
     canvasWidth: STRIP_CANVAS_WIDTH,
@@ -98,6 +113,11 @@ export const LAYOUTS = {
     canvasWidth: CARD_CANVAS_WIDTH,
     canvasHeight: CARD_CANVAS_HEIGHT,
     slots: CARD_C_SLOTS,
+  },
+  grid2d: {
+    canvasWidth: CARD_D_CANVAS_WIDTH,
+    canvasHeight: CARD_D_CANVAS_HEIGHT,
+    slots: CARD_D_SLOTS,
   },
 };
 
