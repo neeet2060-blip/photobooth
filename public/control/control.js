@@ -159,14 +159,38 @@ const FORMAT_LABEL_KEYS = {
   grid2a: 'formatOptionGrid2a', grid2b: 'formatOptionGrid2b',
 };
 
+/**
+ * Every frame in this booth owns its own layout (see shared/layouts.js), so a
+ * format almost always holds exactly one frame, and the theme screen that
+ * follows would offer a single card — the same picture the visitor just tapped.
+ * When that's the case, pick the frame here too and let the session run
+ * straight through the theme phase. Both actions go out over the one socket, in
+ * order, and the reducer applies them synchronously, so 'chooseTheme' always
+ * lands with the session already in the theme phase.
+ *
+ * A layout that really does hold several frames still shows the theme screen.
+ */
+function chooseFormat(layoutId, framesInLayout) {
+  sendAction('chooseFormat', { layoutId });
+  if (framesInLayout.length === 1) {
+    sendAction('chooseTheme', { frameId: framesInLayout[0].id });
+  }
+}
+
 function renderFormat() {
   const layouts = [...new Set(framesCache.filter((f) => f.active).map((f) => f.layout))];
   const grid = el('div', { class: 'frame-grid' });
   for (const layoutId of layouts) {
-    const sample = framesCache.find((f) => f.active && f.layout === layoutId);
-    const label = FORMAT_LABEL_KEYS[layoutId] ? t(FORMAT_LABEL_KEYS[layoutId]) : layoutId;
+    const framesInLayout = framesCache.filter((f) => f.active && f.layout === layoutId);
+    const sample = framesInLayout[0];
+    // Only the two oldest layouts have a translated name. For the rest the
+    // frame's own name is what the visitor should read — falling back to the
+    // layout id would put "grid2g" on the tablet.
+    const label = FORMAT_LABEL_KEYS[layoutId]
+      ? t(FORMAT_LABEL_KEYS[layoutId])
+      : (framesInLayout.length === 1 && sample ? sample.name : layoutId);
     grid.appendChild(
-      el('div', { class: 'frame-card', onclick: () => sendAction('chooseFormat', { layoutId }) }, [
+      el('div', { class: 'frame-card', onclick: () => chooseFormat(layoutId, framesInLayout) }, [
         sample ? el('img', { src: sample.file, alt: label }) : null,
         el('div', {}, label),
       ]),

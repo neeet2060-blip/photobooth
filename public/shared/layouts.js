@@ -119,6 +119,99 @@ const CARD_F_SLOTS = [
   { x: 448, y: 449, w: 398, h: 398 },
 ];
 
+// grid2g..grid2m (2026-08-14) — seven more 2x2 frames for TOK2026, from five
+// artworks: three standalone 1414x2000 designs, plus two 1748x1240 sheets that
+// again carried two frames side by side and were cut at x=874 (exactly half),
+// the same way grid2e/grid2f were.
+//
+// Two things differ from how the earlier entries were derived, and both matter
+// if these numbers are ever re-measured:
+//
+//  1. Each slot is the measured transparent window grown by 3px on every side.
+//     composeFrame paints a black canvas first and clips each photo to its slot,
+//     so a slot that stops exactly at the cutout leaves the window's
+//     anti-aliased edge composited over black — a dark hairline around all four
+//     photos on the print. The extra 3px tucks the photo under the frame's own
+//     opaque border instead, where it cannot be seen.
+//  2. The source PNGs were flattened before being installed: every transparent
+//     pixel OUTSIDE the four windows was inpainted from its neighbours and made
+//     opaque. As delivered they had a transparent band along one outer edge and
+//     a thin transparent ring around each window (sitting outside the drawn
+//     border line), all of which would likewise have printed black. Re-cutting
+//     any of these from the original artwork means redoing that step.
+//
+// Canvas ratios are 1.414 (1414x2000) and 1.419 (874x1240) against the print
+// sheet's 1.5, so composePrintSheet stretches them ~6% vertically — the same
+// tradeoff grid2d/grid2e/grid2f already make, and fine for decorative artwork.
+const CARD_GHI_CANVAS_WIDTH = 1414;
+const CARD_GHI_CANVAS_HEIGHT = 2000;
+
+// grid2g: pink cherry-blossom hanbok. Its lower row of windows is genuinely
+// shorter than its upper row (487 vs 544) — that is the design, not a mis-read.
+const CARD_G_SLOTS = [
+  { x: 119, y: 396, w: 540, h: 544 },
+  { x: 758, y: 396, w: 530, h: 544 },
+  { x: 120, y: 1040, w: 540, h: 487 },
+  // The rabbit sticker covers this window's lower edge, so its transparent run
+  // measures 27px short. Squared up to match the window beside it.
+  { x: 758, y: 1040, w: 530, h: 487 },
+];
+
+// grid2h: navy/gold crane. The tassel overlaps the top-right window's right
+// edge, so that one is squared up against the window below it too.
+const CARD_H_SLOTS = [
+  { x: 101, y: 473, w: 568, h: 554 },
+  { x: 746, y: 473, w: 569, h: 554 },
+  { x: 101, y: 1103, w: 567, h: 549 },
+  { x: 746, y: 1103, w: 569, h: 549 },
+];
+
+// grid2i: bear + tiger mascots.
+const CARD_I_SLOTS = [
+  { x: 156, y: 659, w: 475, h: 470 },
+  { x: 749, y: 659, w: 467, h: 485 },
+  { x: 157, y: 1260, w: 478, h: 473 },
+  { x: 754, y: 1260, w: 469, h: 473 },
+];
+
+const CARD_JKLM_CANVAS_WIDTH = 874;
+const CARD_JKLM_CANVAS_HEIGHT = 1240;
+
+// grid2j/grid2k: the green "GOOD LUCK" and blue "KPOP" halves of one sheet.
+// Note grid2j is a separate design from the existing grid2b, which is also
+// named GOOD LUCK; they share nothing but the words.
+const CARD_J_SLOTS = [
+  { x: 27, y: 247, w: 404, h: 392 },
+  { x: 448, y: 247, w: 404, h: 392 },
+  { x: 27, y: 655, w: 404, h: 402 },
+  { x: 448, y: 655, w: 404, h: 402 },
+];
+
+const CARD_K_SLOTS = [
+  { x: 25, y: 235, w: 404, h: 404 },
+  { x: 446, y: 235, w: 404, h: 404 },
+  { x: 25, y: 655, w: 404, h: 402 },
+  { x: 446, y: 655, w: 404, h: 402 },
+];
+
+// grid2l/grid2m: the pixel-art green and the black/gold halves of the other
+// sheet. These two really were drawn on one shared grid, so their numbers are
+// identical — kept as separate entries anyway so that re-cutting one artwork
+// can never silently move the other's photos.
+const CARD_L_SLOTS = [
+  { x: 25, y: 223, w: 404, h: 405 },
+  { x: 446, y: 223, w: 404, h: 405 },
+  { x: 25, y: 644, w: 404, h: 404 },
+  { x: 446, y: 644, w: 404, h: 404 },
+];
+
+const CARD_M_SLOTS = [
+  { x: 25, y: 223, w: 404, h: 405 },
+  { x: 446, y: 223, w: 404, h: 405 },
+  { x: 25, y: 644, w: 404, h: 404 },
+  { x: 446, y: 644, w: 404, h: 404 },
+];
+
 export const LAYOUTS = {
   strip: {
     canvasWidth: STRIP_CANVAS_WIDTH,
@@ -159,6 +252,41 @@ export const LAYOUTS = {
     canvasWidth: CARD_F_CANVAS_WIDTH,
     canvasHeight: CARD_F_CANVAS_HEIGHT,
     slots: CARD_F_SLOTS,
+  },
+  grid2g: {
+    canvasWidth: CARD_GHI_CANVAS_WIDTH,
+    canvasHeight: CARD_GHI_CANVAS_HEIGHT,
+    slots: CARD_G_SLOTS,
+  },
+  grid2h: {
+    canvasWidth: CARD_GHI_CANVAS_WIDTH,
+    canvasHeight: CARD_GHI_CANVAS_HEIGHT,
+    slots: CARD_H_SLOTS,
+  },
+  grid2i: {
+    canvasWidth: CARD_GHI_CANVAS_WIDTH,
+    canvasHeight: CARD_GHI_CANVAS_HEIGHT,
+    slots: CARD_I_SLOTS,
+  },
+  grid2j: {
+    canvasWidth: CARD_JKLM_CANVAS_WIDTH,
+    canvasHeight: CARD_JKLM_CANVAS_HEIGHT,
+    slots: CARD_J_SLOTS,
+  },
+  grid2k: {
+    canvasWidth: CARD_JKLM_CANVAS_WIDTH,
+    canvasHeight: CARD_JKLM_CANVAS_HEIGHT,
+    slots: CARD_K_SLOTS,
+  },
+  grid2l: {
+    canvasWidth: CARD_JKLM_CANVAS_WIDTH,
+    canvasHeight: CARD_JKLM_CANVAS_HEIGHT,
+    slots: CARD_L_SLOTS,
+  },
+  grid2m: {
+    canvasWidth: CARD_JKLM_CANVAS_WIDTH,
+    canvasHeight: CARD_JKLM_CANVAS_HEIGHT,
+    slots: CARD_M_SLOTS,
   },
 };
 
