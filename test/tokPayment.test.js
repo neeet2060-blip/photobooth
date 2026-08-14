@@ -353,7 +353,8 @@ test('onStateChange writes an expOrders-shaped doc once a paymentMethod is chose
   assert.equal(doc.paymentStatus, 'unpaid');
   assert.equal(doc.source, 'photobooth');
   assert.equal(doc.sessionId, 's1');
-  assert.deepEqual(doc.items, [{ itemId: 'photobooth_print_3', name: '인쇄 3장', qty: 3, price: 0 }]);
+  // qty is 1, not 3: one "인쇄 3장" bundle. See the bundle-pricing test below.
+  assert.deepEqual(doc.items, [{ itemId: 'photobooth_print_3', name: '인쇄 3장', qty: 1, price: 0 }]);
   assert.ok('createdAt' in doc);
 
   tokPayment._stopAllPollsForTests();
@@ -562,8 +563,52 @@ test('onStateChange uses the real exp1 menu price when a matching printQty varia
   const orderDocIds = fakeDb.docIds().filter((id) => id !== 'exp1');
   assert.equal(orderDocIds.length, 1);
   const doc = fakeDb.getDoc(orderDocIds[0]);
-  assert.deepEqual(doc.items, [{ itemId: 'exp1_123', name: '인생네컷 - 인쇄 3장', qty: 3, price: 12.5, variantId: 'v_print3' }]);
-  assert.equal(doc.total, 37.5);
+  // A print variant's price is the price of the WHOLE bundle — 12.5 buys all
+  // three prints — so the order is one unit of it. Storing qty:3 here made
+  // TOK2026's staff cart bill 12.5 x 3; on 2026-08-14 a real €15 four-print
+  // order was displayed as "인쇄 4장 ×4 = €60.00".
+  assert.deepEqual(doc.items, [{ itemId: 'exp1_123', name: '인생네컷 - 인쇄 3장', qty: 1, price: 12.5, variantId: 'v_print3' }]);
+  assert.equal(doc.total, 12.5);
+
+  tokPayment._stopAllPollsForTests();
+});
+
+test('a print bundle is billed once, not once per print (2026-08-14: 4 prints @ EUR15 showed as EUR60)', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  // The live de-dietzenbach-2026 menu as the admin configured it: one variant
+  // per print count, each priced for the whole bundle.
+  await fakeDb.db.collection('events').doc('test-event').collection('expMenus').doc('exp1').set({
+    items: [{
+      id: 'exp1_123', name: '인생네컷', price: 0, photo: null,
+      variants: [
+        { id: 'v_qr', name: 'QR 다운로드', price: 2, photo: null, printQty: 0 },
+        { id: 'v_p1', name: '인쇄 1장', price: 5, photo: null, printQty: 1 },
+        { id: 'v_p2', name: '인쇄 2장', price: 9, photo: null, printQty: 2 },
+        { id: 'v_p3', name: '인쇄 3장', price: 13, photo: null, printQty: 3 },
+        { id: 'v_p4', name: '인쇄 4장', price: 15, photo: null, printQty: 4 },
+      ],
+    }],
+  });
+
+  for (const [quantity, expected] of [[1, 5], [2, 9], [3, 13], [4, 15], [0, 2]]) {
+    const recorder = makeDispatchRecorder({ sessionId: `s${quantity}`, phase: PHASES.PAYMENT, printOrder: { quantity }, paymentMethod: null });
+    tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+    await tokPayment.onStateChange(
+      { phase: PHASES.QUANTITY, printOrder: { quantity }, sessionId: `s${quantity}` },
+      { phase: PHASES.PAYMENT, printOrder: { quantity }, sessionId: `s${quantity}`, paymentMethod: 'sumup' },
+    );
+
+    const orderDocIds = fakeDb.docIds().filter((id) => id !== 'exp1');
+    const doc = fakeDb.getDoc(orderDocIds[orderDocIds.length - 1]);
+    assert.equal(doc.items.length, 1);
+    assert.equal(doc.items[0].qty, 1, `quantity ${quantity} must be billed as one bundle`);
+    assert.equal(doc.items[0].price, expected);
+    assert.equal(doc.total, expected, `quantity ${quantity} must total ${expected}, not ${expected * (quantity || 1)}`);
+  }
 
   tokPayment._stopAllPollsForTests();
 });

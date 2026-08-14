@@ -235,12 +235,21 @@ async function startOrderForSession(nextState) {
   const localPaymentMethod = mapToLocalPaymentMethod(remotePaymentMethod);
   const { quantity } = nextState.printOrder;
   // quantity 0 means "QR only, no physical print" (2026-08-10 QR payment
-  // gate, server/state.js). There's still exactly one QR being purchased,
-  // so the stored line item's qty must be 1 — using quantity(0) directly
-  // would price the whole order at 0 regardless of the QR's real price.
-  // The admin tags the QR menu variant with printQty:0 to match it here.
+  // gate, server/state.js). The admin tags the QR menu variant with
+  // printQty:0 so findPrintMenuVariant can match it here.
   const isQrOnly = quantity === 0;
-  const orderQty = isQrOnly ? 1 : quantity;
+  // 2026-08-14: always 1 — never `quantity`. The visitor buys ONE bundle, and
+  // the matched menu variant is already named AND priced for the whole bundle
+  // ("인쇄 4장", printQty:4, price 15 = fifteen euros for all four prints).
+  // Passing the print count as qty made TOK2026's staff cart multiply that
+  // bundle price by the print count a second time, so a €15 four-print order
+  // was displayed and charged as "인쇄 4장 ×4 = €60.00", and a €9 two-print
+  // order as "인쇄 2장 ×2 = €18.00".
+  //
+  // The QR-only path already depended on this same reasoning — it forced qty
+  // to 1 because quantity(0) would have zeroed the order — but the fix was
+  // only applied to that one case. It holds for every print quantity.
+  const orderQty = 1;
 
   const match = await findPrintMenuVariant(db, quantity);
   const price = match ? Number(match.variant.price) || 0 : 0;
