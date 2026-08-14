@@ -545,6 +545,9 @@ module.exports = {
   PHASES,
   FILTERS,
   PAYMENT_METHODS,
+  // Exported for server/tokPayment.js, which needs the booth's own price for
+  // an order when the TOK2026 menu lookup can't be reached.
+  priceForQuantity,
   PICKS_REQUIRED,
   MIN_PHOTOS_FOR_EARLY_FINISH,
   createInitialState,

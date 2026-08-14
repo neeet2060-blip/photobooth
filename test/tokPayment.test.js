@@ -15,6 +15,14 @@ function freshTokPayment() {
   // default here. Tests that specifically want to assert it's called
   // override it again after this via _setTriggerRemoteConfirmForTests.
   tokPayment._setTriggerRemoteConfirmForTests(async () => {});
+  // When the TOK2026 menu lookup misses, the order is priced from the booth's
+  // own tier table. Pin that table here so no test's expected price depends on
+  // whatever data/settings.json holds on the machine running the suite.
+  tokPayment._setSettingsForTests({
+    printPriceTiersCents: { 0: 200, 1: 500, 2: 900, 3: 1300, 4: 1500 },
+    qrUnitPriceCents: 200,
+    qrRequiresPayment: true,
+  });
   return tokPayment;
 }
 
@@ -354,7 +362,10 @@ test('onStateChange writes an expOrders-shaped doc once a paymentMethod is chose
   assert.equal(doc.source, 'photobooth');
   assert.equal(doc.sessionId, 's1');
   // qty is 1, not 3: one "인쇄 3장" bundle. See the bundle-pricing test below.
-  assert.deepEqual(doc.items, [{ itemId: 'photobooth_print_3', name: '인쇄 3장', qty: 1, price: 0 }]);
+  // No menu is seeded here, so the price comes from the local tier table
+  // (1300 cents -> 13), not from a zero placeholder.
+  assert.deepEqual(doc.items, [{ itemId: 'photobooth_print_3', name: '인쇄 3장', qty: 1, price: 13 }]);
+  assert.equal(doc.total, 13);
   assert.ok('createdAt' in doc);
 
   tokPayment._stopAllPollsForTests();
@@ -613,6 +624,35 @@ test('a print bundle is billed once, not once per print (2026-08-14: 4 prints @ 
   tokPayment._stopAllPollsForTests();
 });
 
+test('an unreachable/unconfigured menu prices from the local tier table, never 0 (2026-08-14 live incident)', async () => {
+  process.env.TOK2026_EVENT_ID = 'test-event';
+  const tokPayment = freshTokPayment();
+  const fakeDb = makeFakeDb();
+  tokPayment._setDbForTests(fakeDb.db);
+
+  // No expMenus doc at all — the same null that findPrintMenuVariant returns
+  // when the Firestore read throws, which is what happened at the venue: the
+  // menu read timed out on the phone hotspot while the order write moments
+  // later succeeded, so staff were shown "인쇄 4장 - EUR 0.00" to charge.
+  for (const [quantity, expected] of [[0, 2], [1, 5], [2, 9], [3, 13], [4, 15]]) {
+    const sessionId = `s${quantity}`;
+    const recorder = makeDispatchRecorder({ sessionId, phase: PHASES.PAYMENT, printOrder: { quantity }, paymentMethod: null });
+    tokPayment.init({ dispatch: recorder.dispatch, getState: recorder.getState });
+    await tokPayment.onStateChange(
+      { phase: PHASES.QUANTITY, printOrder: { quantity }, sessionId },
+      { phase: PHASES.PAYMENT, printOrder: { quantity }, sessionId, paymentMethod: 'sumup' },
+    );
+
+    const ids = fakeDb.docIds();
+    const doc = fakeDb.getDoc(ids[ids.length - 1]);
+    assert.equal(doc.items[0].qty, 1);
+    assert.equal(doc.items[0].price, expected, `quantity ${quantity} must fall back to ${expected}`);
+    assert.equal(doc.total, expected);
+  }
+
+  tokPayment._stopAllPollsForTests();
+});
+
 // ---- QR-only orders (2026-08-10 QR payment gate, printOrder.quantity 0) ----
 
 test('a quantity-0 (QR-only) printOrder is stored with qty:1 and the real QR price, not price*0', async () => {
@@ -646,7 +686,7 @@ test('a quantity-0 (QR-only) printOrder is stored with qty:1 and the real QR pri
   tokPayment._stopAllPollsForTests();
 });
 
-test('a quantity-0 order with no configured QR variant falls back to a 0-price placeholder (never quantity*price)', async () => {
+test('a quantity-0 order with no configured QR variant falls back to the local QR price, never 0 (never quantity*price either)', async () => {
   process.env.TOK2026_EVENT_ID = 'test-event';
   const tokPayment = freshTokPayment();
   const fakeDb = makeFakeDb();
@@ -662,8 +702,8 @@ test('a quantity-0 order with no configured QR variant falls back to a 0-price p
 
   const [docId] = fakeDb.docIds();
   const doc = fakeDb.getDoc(docId);
-  assert.deepEqual(doc.items, [{ itemId: 'photobooth_qr', name: 'QR 다운로드', qty: 1, price: 0 }]);
-  assert.equal(doc.total, 0);
+  assert.deepEqual(doc.items, [{ itemId: 'photobooth_qr', name: 'QR 다운로드', qty: 1, price: 2 }]);
+  assert.equal(doc.total, 2);
 
   tokPayment._stopAllPollsForTests();
 });

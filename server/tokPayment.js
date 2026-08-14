@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { PHASES } = require('./state');
+const { PHASES, priceForQuantity } = require('./state');
 
 const CREDENTIALS_PATH = process.env.TOK2026_FIREBASE_CREDENTIALS
   || path.join(__dirname, '..', 'secrets', 'tok2026-firebase-admin.json');
@@ -77,6 +77,22 @@ function warnOnce(message) {
   if (warnedOnce) return;
   warnedOnce = true;
   console.warn(`[tokPayment] ${message}`);
+}
+
+// Overridable so tests get a deterministic price table instead of whatever
+// data/settings.json happens to hold on the machine running them.
+let _readSettings = null;
+
+function readSettingsSafe() {
+  try {
+    if (_readSettings) return _readSettings();
+    // Required lazily to keep this module loadable in tests that never touch
+    // settings, and to avoid a load-order dependency on store.js.
+    // eslint-disable-next-line global-require
+    return require('./store').readSettings();
+  } catch (err) {
+    return {};
+  }
 }
 
 function readCredentialsSafe() {
@@ -150,6 +166,15 @@ function _setDbForTests(db) {
 }
 
 /**
+ * Test-only seam: inject the settings object used for the local-tier price
+ * fallback, so a test's expected price doesn't depend on the real
+ * data/settings.json. Pass null to reset back to store.readSettings().
+ */
+function _setSettingsForTests(settings) {
+  _readSettings = settings === null ? null : () => settings;
+}
+
+/**
  * Called once at server startup. Dependency-injection style (mirrors
  * server/routes.js's registerRoutes(app, deps)) rather than importing
  * server/index.js's internals directly.
@@ -218,7 +243,11 @@ async function findPrintMenuVariant(db, quantity) {
     }
     return null;
   } catch (err) {
-    warnOnce(`menu price lookup failed, falling back to a 0-price placeholder: ${(err && err.message) || err}`);
+    // Not warnOnce: warnedOnce is a single process-wide latch, and losing
+    // sight of a repeatedly failing price lookup is how a whole event's worth
+    // of orders can go out mispriced. The caller prices from the booth's local
+    // tier table when this returns null.
+    console.warn(`[tokPayment] menu price lookup failed, falling back to the local tier table: ${(err && err.message) || err}`);
     return null;
   }
 }
@@ -252,13 +281,35 @@ async function startOrderForSession(nextState) {
   const orderQty = 1;
 
   const match = await findPrintMenuVariant(db, quantity);
-  const price = match ? Number(match.variant.price) || 0 : 0;
   const fallbackName = isQrOnly ? 'QR 다운로드' : `인쇄 ${quantity}장`;
   const itemId = match ? match.item.id : (isQrOnly ? 'photobooth_qr' : `photobooth_print_${quantity}`);
   const variantId = match ? match.variant.id : undefined;
   const name = match ? `${match.item.name || '인생네컷'} - ${match.variant.name || fallbackName}` : fallbackName;
-  if (!match) {
-    warnOnce(`no expMenus/${BOOTH_KEY} variant with printQty=${quantity} found — order will be created with price 0 until an admin configures it.`);
+
+  // 2026-08-14: a miss used to mean price 0, which put "인쇄 4장 — EUR 0.00"
+  // in front of staff on the payment terminal mid-event. findPrintMenuVariant
+  // returns null for a Firestore error just as readily as for a genuinely
+  // unconfigured menu, and on the venue's phone hotspot that read failed
+  // intermittently while the order write moments later still succeeded.
+  //
+  // The booth already knows what it just quoted the visitor — the same tier
+  // table state.js charges from, kept in sync with the TOK2026 menu — so use
+  // that rather than billing nothing. Tiers are whole-order cents; menu
+  // variant prices are euros.
+  //
+  // A matched variant is always trusted as-is, including a deliberate 0.
+  let price;
+  if (match) {
+    price = Number(match.variant.price) || 0;
+  } else {
+    price = priceForQuantity(quantity, readSettingsSafe()) / 100;
+    // Deliberately not warnOnce: warnedOnce is a single process-wide latch, so
+    // the first warning of any kind silences every later one. Mispricing an
+    // order has to be visible every single time it happens.
+    console.warn(
+      `[tokPayment] no expMenus/${BOOTH_KEY} variant for printQty=${quantity} (unconfigured, or Firestore was `
+      + `unreachable for that read) — pricing this order from the booth's local tier table at EUR ${price.toFixed(2)}.`,
+    );
   }
 
   const docData = {
@@ -544,6 +595,7 @@ module.exports = {
   onStateChange,
   resumePollForSession,
   _setDbForTests,
+  _setSettingsForTests,
   _pollOnceForTests,
   _stopAllPollsForTests,
   _setTriggerRemoteConfirmForTests,
