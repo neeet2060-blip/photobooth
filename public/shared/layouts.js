@@ -88,6 +88,74 @@ const CARD_D_SLOTS = [
   { x: 683, y: 961, w: 421, h: 359 },
 ];
 
+// grid2e~grid2k (2026-08-14) — 5 new frame designs (pink hanbok, blue crane,
+// bear+tiger, and 2 side-by-side pairs split into 4: 777/goodluck, kpop,
+// minecraft, korean-traditional). Each uses its own native canvas size —
+// slots measured directly from each artwork's own alpha channel (real
+// transparent cutouts). Keep in sync with server/layouts.js.
+const CARD_E_CANVAS_WIDTH = 1414;
+const CARD_E_CANVAS_HEIGHT = 2000;
+const CARD_E_SLOTS = [
+  { x: 106, y: 384, w: 549, h: 567 },
+  { x: 746, y: 385, w: 539, h: 566 },
+  { x: 107, y: 1029, w: 562, h: 506 },
+  { x: 746, y: 1029, w: 539, h: 506 },
+];
+
+const CARD_F_CANVAS_WIDTH = 1414;
+const CARD_F_CANVAS_HEIGHT = 2000;
+const CARD_F_SLOTS = [
+  { x: 89, y: 463, w: 595, h: 577 },
+  { x: 735, y: 476, w: 589, h: 547 },
+  { x: 89, y: 1091, w: 595, h: 569 },
+  { x: 735, y: 1091, w: 589, h: 569 },
+];
+
+const CARD_G_CANVAS_WIDTH = 1414;
+const CARD_G_CANVAS_HEIGHT = 2000;
+const CARD_G_SLOTS = [
+  { x: 159, y: 662, w: 469, h: 463 },
+  { x: 752, y: 662, w: 460, h: 478 },
+  { x: 160, y: 1263, w: 471, h: 466 },
+  { x: 757, y: 1263, w: 462, h: 466 },
+];
+
+const CARD_H_CANVAS_WIDTH = 874;
+const CARD_H_CANVAS_HEIGHT = 1240;
+const CARD_H_SLOTS = [
+  { x: 30, y: 250, w: 397, h: 385 },
+  { x: 451, y: 250, w: 397, h: 385 },
+  { x: 30, y: 659, w: 397, h: 394 },
+  { x: 451, y: 658, w: 397, h: 395 },
+];
+
+const CARD_I_CANVAS_WIDTH = 874;
+const CARD_I_CANVAS_HEIGHT = 1240;
+const CARD_I_SLOTS = [
+  { x: 28, y: 238, w: 397, h: 397 },
+  { x: 449, y: 238, w: 397, h: 397 },
+  { x: 28, y: 658, w: 397, h: 395 },
+  { x: 449, y: 658, w: 397, h: 395 },
+];
+
+const CARD_J_CANVAS_WIDTH = 874;
+const CARD_J_CANVAS_HEIGHT = 1240;
+const CARD_J_SLOTS = [
+  { x: 28, y: 226, w: 397, h: 398 },
+  { x: 449, y: 226, w: 397, h: 398 },
+  { x: 28, y: 647, w: 397, h: 397 },
+  { x: 449, y: 647, w: 397, h: 397 },
+];
+
+const CARD_K_CANVAS_WIDTH = 874;
+const CARD_K_CANVAS_HEIGHT = 1240;
+const CARD_K_SLOTS = [
+  { x: 28, y: 226, w: 397, h: 398 },
+  { x: 449, y: 226, w: 397, h: 398 },
+  { x: 28, y: 647, w: 397, h: 397 },
+  { x: 449, y: 647, w: 397, h: 397 },
+];
+
 export const LAYOUTS = {
   strip: {
     canvasWidth: STRIP_CANVAS_WIDTH,
@@ -118,6 +186,41 @@ export const LAYOUTS = {
     canvasWidth: CARD_D_CANVAS_WIDTH,
     canvasHeight: CARD_D_CANVAS_HEIGHT,
     slots: CARD_D_SLOTS,
+  },
+  grid2e: {
+    canvasWidth: CARD_E_CANVAS_WIDTH,
+    canvasHeight: CARD_E_CANVAS_HEIGHT,
+    slots: CARD_E_SLOTS,
+  },
+  grid2f: {
+    canvasWidth: CARD_F_CANVAS_WIDTH,
+    canvasHeight: CARD_F_CANVAS_HEIGHT,
+    slots: CARD_F_SLOTS,
+  },
+  grid2g: {
+    canvasWidth: CARD_G_CANVAS_WIDTH,
+    canvasHeight: CARD_G_CANVAS_HEIGHT,
+    slots: CARD_G_SLOTS,
+  },
+  grid2h: {
+    canvasWidth: CARD_H_CANVAS_WIDTH,
+    canvasHeight: CARD_H_CANVAS_HEIGHT,
+    slots: CARD_H_SLOTS,
+  },
+  grid2i: {
+    canvasWidth: CARD_I_CANVAS_WIDTH,
+    canvasHeight: CARD_I_CANVAS_HEIGHT,
+    slots: CARD_I_SLOTS,
+  },
+  grid2j: {
+    canvasWidth: CARD_J_CANVAS_WIDTH,
+    canvasHeight: CARD_J_CANVAS_HEIGHT,
+    slots: CARD_J_SLOTS,
+  },
+  grid2k: {
+    canvasWidth: CARD_K_CANVAS_WIDTH,
+    canvasHeight: CARD_K_CANVAS_HEIGHT,
+    slots: CARD_K_SLOTS,
   },
 };
 
