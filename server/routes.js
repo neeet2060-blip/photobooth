@@ -502,6 +502,26 @@ function registerRoutes(app, deps) {
       }
       next.maxPrintQuantity = num;
     }
+    if (body.printPriceTiersCents !== undefined) {
+      // Keys are print quantities, values whole-order prices in cents. A
+      // malformed entry here would silently become a free print, so reject the
+      // whole table rather than skipping bad rows.
+      const tiers = body.printPriceTiersCents;
+      if (tiers === null || typeof tiers !== 'object' || Array.isArray(tiers)) {
+        return res.status(400).json({ ok: false, error: 'invalid_printPriceTiersCents' });
+      }
+      const cleaned = {};
+      for (const [key, value] of Object.entries(tiers)) {
+        const quantity = Number(key);
+        const price = Number(value);
+        if (!Number.isInteger(quantity) || quantity < 0 || quantity > 99
+          || !Number.isInteger(price) || price < 0 || price > 100000) {
+          return res.status(400).json({ ok: false, error: 'invalid_printPriceTiersCents' });
+        }
+        cleaned[String(quantity)] = price;
+      }
+      next.printPriceTiersCents = cleaned;
+    }
     if (body.qrRequiresPayment !== undefined) {
       if (typeof body.qrRequiresPayment !== 'boolean') {
         return res.status(400).json({ ok: false, error: 'invalid_qrRequiresPayment' });

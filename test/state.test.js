@@ -626,3 +626,54 @@ test('printSheetReady: pushes print-order-confirmed effect and clears confirmedP
   assert.equal(effect.unitPriceCents, SETTINGS.printUnitPriceCents);
   assert.equal(effect.totalCents, SETTINGS.printUnitPriceCents);
 });
+
+
+// ---- Tiered pricing (2026-08-14) ----
+// TOK2026 — which does the actual charging — prices prints in tiers
+// (5/9/13/16 EUR for 1-4), and no single unit price reproduces that. Before
+// printPriceTiersCents the booth showed a visitor 8 EUR for two prints while
+// TOK2026 billed 9.
+
+const TIERED_SETTINGS = {
+  ...SETTINGS,
+  printingEnabled: true,
+  qrRequiresPayment: true,
+  qrUnitPriceCents: 200,
+  maxPrintQuantity: 4,
+  printPriceTiersCents: { 1: 500, 2: 900, 3: 1300, 4: 1600 },
+};
+
+function chargeFor(quantity, settings) {
+  const ctxFor = { settings, frames: FRAMES };
+  let state = applyAction(createInitialState(), { type: 'start' }, ctxFor).state;
+  state = applyAction(state, { type: 'agree' }, ctxFor).state;
+  state = applyAction(state, { type: 'chooseFormat', payload: { layoutId: 'strip' } }, ctxFor).state;
+  state = applyAction(state, { type: 'chooseTheme', payload: { frameId: 'frame-a' } }, ctxFor).state;
+  state = applyAction(state, { type: 'setPrintQuantity', payload: { quantity } }, ctxFor).state;
+  state = applyAction(state, { type: 'confirmPrintQuantity' }, ctxFor).state;
+  state = applyAction(state, { type: 'choosePaymentMethod', payload: { method: 'cash' } }, ctxFor).state;
+  return applyAction(state, { type: 'confirmPrintPayment' }, ctxFor).state;
+}
+
+test('each configured tier is charged as the whole bill, with no QR price added on top', () => {
+  for (const [quantity, expected] of Object.entries({ 1: 500, 2: 900, 3: 1300, 4: 1600 })) {
+    const state = chargeFor(Number(quantity), TIERED_SETTINGS);
+    assert.equal(
+      state.confirmedPrintOrder.totalCents,
+      expected,
+      `${quantity} print(s) must cost ${expected} cents, matching the TOK2026 variant`,
+    );
+  }
+});
+
+test('a quantity with no tier entry still falls back to the linear price', () => {
+  const settings = { ...TIERED_SETTINGS, maxPrintQuantity: 10, printPriceTiersCents: { 1: 500 } };
+  const state = chargeFor(5, settings);
+  assert.equal(state.confirmedPrintOrder.totalCents, 5 * 300 + 200);
+});
+
+test('with no tier table at all, pricing is unchanged from before the feature', () => {
+  const settings = { ...TIERED_SETTINGS, printPriceTiersCents: {} };
+  const state = chargeFor(2, settings);
+  assert.equal(state.confirmedPrintOrder.totalCents, 2 * 300 + 200);
+});

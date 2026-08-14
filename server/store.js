@@ -29,6 +29,16 @@ const DEFAULT_SETTINGS = {
   // this event's actual data/settings.json turns it off.
   printingEnabled: true,
   printUnitPriceCents: 300,
+  // Per-quantity prices, keyed by number of prints, in cents — e.g.
+  // { "1": 500, "2": 900 }. Takes precedence over printUnitPriceCents when a
+  // quantity has an entry.
+  //
+  // Exists because TOK2026 (which is what actually charges the visitor) prices
+  // prints in tiers rather than per unit: 5/9/13/16 EUR for 1-4 prints, where
+  // quantity*unitPrice + qrPrice can only ever match one of those. Before this,
+  // the booth showed a visitor 8 EUR for two prints and TOK2026 billed 9.
+  // Leave empty to keep the old linear behaviour.
+  printPriceTiersCents: {},
   maxPrintQuantity: 10,
   // Gates QR delivery itself behind payment, independent of printingEnabled
   // (2026-08-10, TOK2026 photobooth integration — server/tokPayment.js).

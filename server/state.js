@@ -49,6 +49,34 @@ const DEFAULT_MAX_PRINT_QUANTITY = 10;
 const DEFAULT_PRINT_UNIT_PRICE_CENTS = 300;
 const DEFAULT_QR_PRICE_CENTS = 300; // fallback only; settings.qrUnitPriceCents is the real source
 
+/**
+ * What the visitor owes for `quantity` prints, in cents.
+ *
+ * settings.printPriceTiersCents wins when it has an entry for this quantity;
+ * otherwise this falls back to the original quantity*unitPrice + qrPrice.
+ * The tier table exists because TOK2026 — which does the actual charging —
+ * prices in tiers, and no single unit price can reproduce 5/9/13/16 EUR for
+ * 1-4 prints. A tier price is the visitor's WHOLE bill (it already includes
+ * the QR), matching how the TOK2026 variants are priced.
+ *
+ * MUST stay behaviourally identical to totalCentsFor() in
+ * public/control/control.js — that copy renders the price the visitor reads
+ * on the quantity and payment screens, and this one records what they were
+ * charged. They disagreeing is exactly the bug the tiers were added to fix.
+ */
+function priceForQuantity(quantity, settings) {
+  const tiers = (settings && settings.printPriceTiersCents) || {};
+  const tier = tiers[String(quantity)];
+  if (Number.isFinite(tier) && tier >= 0) return tier;
+
+  const unitPriceCents = settings.printUnitPriceCents ?? DEFAULT_PRINT_UNIT_PRICE_CENTS;
+  const qrUnitPriceCents = settings.qrUnitPriceCents ?? DEFAULT_QR_PRICE_CENTS;
+  if (quantity > 0) {
+    return quantity * unitPriceCents + (settings.qrRequiresPayment ? qrUnitPriceCents : 0);
+  }
+  return qrUnitPriceCents;
+}
+
 const PAYMENT_METHODS = Object.freeze(['sumup', 'cash']);
 
 const FILTERS = Object.freeze([
@@ -294,9 +322,7 @@ function applyAction(state, action, context) {
       // quantity 0 means "QR only" (see printOrder comment in
       // createInitialState) — its price is qrUnitPriceCents, not
       // quantity * unitPriceCents (which would be 0 and undercharge).
-      const totalCents = quantity > 0
-        ? quantity * unitPriceCents + (settings.qrRequiresPayment ? qrUnitPriceCents : 0)
-        : qrUnitPriceCents;
+      const totalCents = priceForQuantity(quantity, settings);
       // Deferred: the print.jpg sheet doesn't exist yet (capture hasn't
       // happened), so the actual print-queue effect fires later, from
       // 'printSheetReady', once the file is really on disk. A quantity-0

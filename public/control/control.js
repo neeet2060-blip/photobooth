@@ -425,7 +425,17 @@ function formatEuros(cents) {
 function totalCentsFor(quantity, printSettings) {
   // quantity 0 means "QR only, no physical print" (2026-08-10 QR payment
   // gate) — its price is qrUnitPriceCents alone, never quantity*unitPrice
-  // (which would be 0). Mirrors server/state.js's confirmPrintPayment.
+  // (which would be 0).
+  //
+  // MUST stay behaviourally identical to priceForQuantity() in
+  // server/state.js: this renders the figure the visitor agrees to, that one
+  // records what they are charged. printPriceTiersCents was added precisely
+  // because the two had drifted — the booth showed 8 EUR for two prints while
+  // TOK2026 billed 9.
+  const tiers = (printSettings && printSettings.printPriceTiersCents) || {};
+  const tier = tiers[String(quantity)];
+  if (Number.isFinite(tier) && tier >= 0) return tier;
+
   const unitPriceCents = (printSettings && printSettings.printUnitPriceCents) || 0;
   const qrUnitPriceCents = (printSettings && printSettings.qrUnitPriceCents) || 0;
   const qrRequiresPayment = Boolean(printSettings && printSettings.qrRequiresPayment);
