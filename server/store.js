@@ -38,6 +38,11 @@ const DEFAULT_SETTINGS = {
   qrUnitPriceCents: 300,
   printMode: 'folder',
   printerName: '',
+  // Only used by printMode 'ipp' (server/ipp.js). Empty is the normal setting:
+  // the venue runs on a phone hotspot that reassigns addresses on every
+  // restart, so the printer is discovered on the local subnet instead of being
+  // pinned to an address that goes stale. Set it to skip discovery.
+  printerUrl: '',
   printMedia: '4x6',
   // How long /api/final waits for the cloud upload before falling back to
   // the LAN-only URL (see server/cloud.js + CLOUD.md).

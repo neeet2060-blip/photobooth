@@ -18,6 +18,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 const store = require('./store');
+const ipp = require('./ipp');
 
 // Same allowlist used by server/routes.js when validating admin settings
 // (printerName/printMedia) — keep these two definitions in sync.
@@ -107,20 +108,86 @@ async function printWindowsMode(filePath, { copies, printerName, execFileImpl })
   return { mode: 'windows', args };
 }
 
+// Talks IPP straight to the printer, skipping the OS print stack entirely.
+//
+// Added for the Canon SELPHY CP1500 (2026-08-13), which has no Windows 11
+// driver at all — Windows substitutes a generic IPP class driver that reports
+// the printer as Letter/A4 + grayscale, so 'windows' mode would print a
+// stretched black-and-white photo onto paper the printer doesn't hold. Asked
+// over IPP, the same printer correctly reports image/jpeg support,
+// jpn_hagaki_100x148mm loaded, and colour.
+//
+// Address handling is deliberately forgiving: the venue network is a phone
+// hotspot that reassigns addresses on every restart, so a configured address
+// is treated as a hint, not a requirement. If it is missing, unparseable, or
+// simply no longer answers, the printer is discovered on the local subnet
+// instead — a volunteer should never have to read an IP off the printer's
+// screen while visitors wait.
+async function printIppMode(filePath, { copies, printerUrl, media, ippImpl = ipp }) {
+  const copiesNum = Number(copies);
+  if (!Number.isInteger(copiesNum) || copiesNum < 1) {
+    throw new Error(`Invalid copies for ipp mode: ${JSON.stringify(copies)}`);
+  }
+
+  const data = await fs.promises.readFile(filePath);
+
+  const configured = ippImpl.parseTarget(printerUrl);
+  let target = configured;
+  let resolvedMedia = media || null;
+  let discovered = false;
+
+  if (target) {
+    try {
+      const attributes = await ippImpl.getPrinterAttributes(target);
+      if (!ippImpl.acceptsJpeg(attributes)) {
+        throw new Error('printer does not accept image/jpeg');
+      }
+      // Prefer the paper actually loaded over a possibly stale setting.
+      if (!resolvedMedia) resolvedMedia = ippImpl.readyMedia(attributes);
+    } catch (err) {
+      target = null;
+    }
+  }
+
+  if (!target) {
+    const found = await ippImpl.discover();
+    if (!found) {
+      throw new Error('No IPP printer found on the local network');
+    }
+    target = found.target;
+    discovered = true;
+    if (!resolvedMedia) resolvedMedia = found.media;
+  }
+
+  const result = await ippImpl.printJob(target, data, { copies: copiesNum, media: resolvedMedia });
+  return {
+    mode: 'ipp',
+    target: `${target.host}:${target.port}${target.path}`,
+    media: resolvedMedia,
+    discovered,
+    jobId: result.jobId,
+    jobState: result.jobState,
+  };
+}
+
 /**
  * @param {string} filePath - JPEG file to print
  * @param {object} opts
  * @param {number} opts.copies
  * @param {string} [opts.printerName]
+ * @param {string} [opts.printerUrl] - for 'ipp' mode; empty means auto-discover
  * @param {string} [opts.media]
  * @param {object} [opts.extraOptions]
- * @param {'folder'|'cups'|'windows'} opts.mode
+ * @param {'folder'|'cups'|'windows'|'ipp'} opts.mode
  * @param {string} [opts.jobId] - required for 'folder' mode (used in the output filename)
  * @param {(cmd: string, args: string[]) => Promise<any>} [opts.execFileImpl] - injectable for tests
  * @returns {Promise<object>}
  */
 function printFile(filePath, opts = {}) {
-  const { copies, printerName, media, mode, jobId, execFileImpl = defaultExecFileImpl } = opts;
+  const {
+    copies, printerName, printerUrl, media, mode, jobId,
+    execFileImpl = defaultExecFileImpl, ippImpl,
+  } = opts;
 
   if (mode === 'folder') {
     return printFolderMode(filePath, { copies, jobId });
@@ -130,6 +197,9 @@ function printFile(filePath, opts = {}) {
   }
   if (mode === 'windows') {
     return printWindowsMode(filePath, { copies, printerName, execFileImpl });
+  }
+  if (mode === 'ipp') {
+    return printIppMode(filePath, { copies, printerUrl, media, ...(ippImpl ? { ippImpl } : {}) });
   }
   return Promise.reject(new Error(`Unknown print mode: ${mode}`));
 }
