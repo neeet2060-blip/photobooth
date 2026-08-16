@@ -447,6 +447,7 @@ function formatEuros(cents) {
 }
 
 function totalCentsFor(quantity, printSettings) {
+  if (Number.isInteger(quantity) && quantity >= 0 && quantity <= 4) return 0;
   // quantity 0 means "QR only, no physical print" (2026-08-10 QR payment
   // gate) — its price is qrUnitPriceCents alone, never quantity*unitPrice
   // (which would be 0).
@@ -481,9 +482,9 @@ function renderQuantity(state) {
 
   const printOrder = state.printOrder;
   const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
-  const qrRequiresPayment = Boolean(printSettingsCache && printSettingsCache.qrRequiresPayment);
-  const qrUnitPriceCents = (printSettingsCache && printSettingsCache.qrUnitPriceCents) || 0;
-  const printingEnabled = Boolean(printSettingsCache && printSettingsCache.printingEnabled);
+  const qrRequiresPayment = false;
+  const qrUnitPriceCents = 0;
+  const printingEnabled = true;
 
   if (quantityScreenStep === 'choose') {
     const qrPriceLabel = qrRequiresPayment ? formatEuros(qrUnitPriceCents) : t('quantityFreeLabel');
@@ -549,7 +550,7 @@ function renderQuantity(state) {
 
   // step === 'count': 실제인쇄를 고른 뒤에만 오는, 기존 매수 조정 화면(0으로는 못 내려감 — QR은
   // 위 선택 화면에서 이미 별도로 처리됨).
-  const maxQuantity = (printSettingsCache && printSettingsCache.maxPrintQuantity) || FALLBACK_MAX_PRINT_QUANTITY;
+  const maxQuantity = 4;
   const totalLabel = printSettingsCache
     ? t('quantityTotal', { total: formatEuros(totalCentsFor(quantity, printSettingsCache)) })
     : t('quantityOf', { quantity });
@@ -649,76 +650,22 @@ async function handlePaymentConfirm(state) {
 function renderPayment(state) {
   const printOrder = state.printOrder;
   const quantity = printOrder ? printOrder.quantity : MIN_PRINT_QUANTITY;
-  const totalLabel = printSettingsCache
-    ? t('paymentTotalLabel', { total: formatEuros(totalCentsFor(quantity, printSettingsCache)) })
-    : t('quantityOf', { quantity });
-  // 결제요청(카드/현금 버튼 클릭)을 누른 시각(2026-08-11 사용자 요청/수정) — TOK2026 결제
-  // 대시보드엔 여러 미결제건이 동시에 뜰 수 있어서, 직원이 "지금 이 손님" 주문을 시각으로 맞춰
-  // 찾은 뒤 그 화면의 SumUp 버튼으로 결제를 시도한다. paymentMethodChosenAt은 'choosePaymentMethod'
-  // 시점에 찍히는데, 이 시점이 곧 tokPayment.js가 TOK2026 주문을 만들거나 동기화하는 시점과
-  // 같아서(state.js 참고) 세션 시작 시각(createdAt)보다 훨씬 더 정확하게 대시보드 항목과 맞아떨어진다.
-  const createdTimeLabel = state.paymentMethodChosenAt
-    ? t('paymentCreatedAtLabel', { time: new Date(state.paymentMethodChosenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
-    : null;
 
-  const methodBtn = (method, label) =>
+  return el('div', { class: 'screen' }, [
+    el('h1', {}, t('paymentTitle')),
+    el('div', {}, t('paymentTotalLabel', { total: formatEuros(0) })),
     el(
       'button',
       {
-        class: state.paymentMethod === method ? 'primary' : null,
-        onclick: () => {
-          // A fresh method choice (even re-choosing the same method after
-          // switching away) always clears a prior "waiting on staff" flag —
-          // otherwise switching cash -> card -> cash again would show that
-          // state without the participant having clicked confirm again.
-          paymentConfirmedSessionId = null;
-          sendAction('choosePaymentMethod', { method });
-        },
+        class: 'primary big-button',
+        onclick: () => sendAction('choosePaymentMethod', { method: 'cash' }),
       },
-      label,
-    );
-
-  const children = [
-    el('h1', {}, t('paymentTitle')),
-    el('div', {}, totalLabel),
-  ];
-  if (createdTimeLabel) {
-    children.push(el('div', { style: 'color:var(--muted, #888);font-size:14px;' }, createdTimeLabel));
-  }
-  children.push(
+      t('paymentMethodCash'),
+    ),
     el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
-      methodBtn('sumup', t('paymentMethodSumup')),
-      methodBtn('cash', t('paymentMethodCash')),
-    ]),
-  );
-
-  const confirmed = Boolean(state.paymentMethod) && paymentConfirmedSessionId === state.sessionId;
-
-  if (state.paymentMethod) {
-    children.push(el('div', {}, confirmed ? t('paymentAwaitingStaffConfirm') : t('paymentAwaiting')));
-  }
-
-  children.push(
-    el('div', { style: 'display:flex;gap:16px;justify-content:center;' }, [
-      // 'cancel'은 state.js에서 이미 PAYMENT 단계까지 허용돼 있었지만(테스트/취소 목적)
-      // 이 화면엔 버튼이 없었음(2026-08-11) — 세션을 완전히 처음으로 되돌린다(수량 화면으로만
-      // 돌아가는 backToQuantity와 다름).
       el('button', { onclick: () => sendAction('cancel') }, t('cancelButton')),
       el('button', { onclick: () => sendAction('backToQuantity') }, t('paymentBackButton')),
-      // Staff-operated: this booth screen sits with staff at this step, same
-      // as the rest of the flow (no separate staff-vs-customer surface exists
-      // elsewhere in control.js either).
-      el(
-        'button',
-        {
-          class: 'primary big-button',
-          disabled: (state.paymentMethod && !confirmed) ? null : 'disabled',
-          onclick: () => handlePaymentConfirm(state),
-        },
-        t('paymentConfirmButton'),
-      ),
     ]),
-  );
-
-  return el('div', { class: 'screen' }, children);
+    el('div', { class: 'progress-text' }, t('quantityOf', { quantity })),
+  ]);
 }

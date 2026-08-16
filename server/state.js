@@ -65,6 +65,9 @@ const DEFAULT_QR_PRICE_CENTS = 300; // fallback only; settings.qrUnitPriceCents 
  * charged. They disagreeing is exactly the bug the tiers were added to fix.
  */
 function priceForQuantity(quantity, settings) {
+  // Taste of Korea 2026 free-event policy: QR (0) and 1-4 physical prints are free.
+  if (Number.isInteger(quantity) && quantity >= 0 && quantity <= 4) return 0;
+
   const tiers = (settings && settings.printPriceTiersCents) || {};
   const tier = tiers[String(quantity)];
   if (Number.isFinite(tier) && tier >= 0) return tier;
@@ -252,14 +255,12 @@ function applyAction(state, action, context) {
         nextPhase = PHASES.SELECT;
       } else if (state.qrPaid) {
         nextPhase = PHASES.CAPTURE;
-      } else if (settings.printingEnabled || settings.qrRequiresPayment) {
-        // qrRequiresPayment alone (printingEnabled off) still needs a
-        // payment step for the QR itself — printOrder.quantity starts at 0
-        // in that case (see createInitialState's printOrder comment).
-        nextPhase = PHASES.QUANTITY;
-        printOrder = { quantity: settings.printingEnabled ? 1 : 0 };
       } else {
-        nextPhase = PHASES.CAPTURE;
+        // This event always offers 1-4 free prints. The payment screen is kept
+        // only as the operator's familiar start control; pressing Cash starts
+        // capture locally without creating or checking a TOK2026 order.
+        nextPhase = PHASES.QUANTITY;
+        printOrder = { quantity: 1 };
       }
       const next = touch({
         ...state,
@@ -276,10 +277,8 @@ function applyAction(state, action, context) {
         return { state: withError(state, 'invalid_action'), effects };
       }
       const { quantity } = payload;
-      const maxPrintQuantity = settings.maxPrintQuantity ?? DEFAULT_MAX_PRINT_QUANTITY;
-      // 0 is only a valid choice when QR itself is a paid item — otherwise
-      // "0 prints" would mean paying for literally nothing.
-      const minQuantity = settings.qrRequiresPayment ? 0 : 1;
+      const maxPrintQuantity = 4;
+      const minQuantity = 1;
       if (!Number.isInteger(quantity) || quantity < minQuantity || quantity > maxPrintQuantity) {
         return { state: withError(state, 'invalid_quantity'), effects };
       }
@@ -308,6 +307,21 @@ function applyAction(state, action, context) {
       const { method } = payload;
       if (!PAYMENT_METHODS.includes(method)) {
         return { state: withError(state, 'invalid_payment_method'), effects };
+      }
+      if (method === 'cash') {
+        const { quantity } = state.printOrder;
+        const next = touch({
+          ...state,
+          phase: PHASES.CAPTURE,
+          printOrder: null,
+          paymentMethod: null,
+          paymentMethodChosenAt: null,
+          qrPaid: true,
+          confirmedPrintOrder: quantity > 0
+            ? { quantity, unitPriceCents: 0, totalCents: 0, method: 'cash' }
+            : null,
+        });
+        return { state: next, effects };
       }
       return { state: touch({ ...state, paymentMethod: method, paymentMethodChosenAt: Date.now() }), effects };
     }
