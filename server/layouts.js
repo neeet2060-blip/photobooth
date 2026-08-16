@@ -103,16 +103,13 @@ const CARD_D_SLOTS = [
 // Both canvases are ~1.42 tall-to-wide where a 4x6 print sheet is 1.5, so the
 // sheet stretches them ~6% vertically, exactly as grid2d already does. Fine
 // for decorative artwork; a redesign at 1200x1800 would remove it.
-const CARD_E_CANVAS_WIDTH = 875;
+const CARD_E_CANVAS_WIDTH = 874;
 const CARD_E_CANVAS_HEIGHT = 1240;
 const CARD_E_SLOTS = [
-  { x: 28, y: 241, w: 398, h: 397 },
-  { x: 449, y: 241, w: 398, h: 397 },
-  // The bear/tiger sticker sits on top of this window's lower edge, so the
-  // measured transparent run stops early (h=303). The real window matches its
-  // neighbour — using the measured value would letterbox this one photo.
-  { x: 28, y: 662, w: 398, h: 391 },
-  { x: 449, y: 662, w: 398, h: 391 },
+  { x: 28, y: 28, w: 398, h: 398 },
+  { x: 449, y: 28, w: 398, h: 398 },
+  { x: 28, y: 449, w: 398, h: 398 },
+  { x: 449, y: 449, w: 398, h: 398 },
 ];
 
 const CARD_F_CANVAS_WIDTH = 873;
