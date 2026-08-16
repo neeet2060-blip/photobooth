@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS = {
   // payment for prints nobody can pick up. Defaults to on for future events;
   // this event's actual data/settings.json turns it off.
   printingEnabled: true,
-  printUnitPriceCents: 300,
+  printUnitPriceCents: 0,
   // Per-quantity prices, keyed by number of prints, in cents — e.g.
   // { "1": 500, "2": 900 }. Takes precedence over printUnitPriceCents when a
   // quantity has an entry.
@@ -38,16 +38,16 @@ const DEFAULT_SETTINGS = {
   // quantity*unitPrice + qrPrice can only ever match one of those. Before this,
   // the booth showed a visitor 8 EUR for two prints and TOK2026 billed 9.
   // Leave empty to keep the old linear behaviour.
-  printPriceTiersCents: {},
-  maxPrintQuantity: 10,
+  printPriceTiersCents: { '1': 0, '2': 0, '3': 0, '4': 0 },
+  maxPrintQuantity: 4,
   // Gates QR delivery itself behind payment, independent of printingEnabled
   // (2026-08-10, TOK2026 photobooth integration — server/tokPayment.js).
   // Defaults OFF: existing/other events must opt in explicitly rather than
   // silently start requiring payment for a QR code that used to be free.
   qrRequiresPayment: false,
-  qrUnitPriceCents: 300,
-  printMode: 'folder',
-  printerName: '',
+  qrUnitPriceCents: 0,
+  printMode: 'ipp',
+  printerName: 'Canon SELPHY CP1500',
   // Only used by printMode 'ipp' (server/ipp.js). Empty is the normal setting:
   // the venue runs on a phone hotspot that reassigns addresses on every
   // restart, so the printer is discovered on the local subnet instead of being
