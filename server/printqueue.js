@@ -167,13 +167,13 @@ async function runJob(jobId) {
       // eslint-disable-next-line no-await-in-loop
       const result = await printer.printFile(job.file, {
         copies: job.quantity,
-        printerName: settings.printerName,
-        printerUrl: settings.printerUrl,
+        printerName: 'Canon SELPHY CP1500',
+        printerUrl: '',
         // 'ipp' mode reads the paper actually loaded from the printer itself,
         // so the configured media is only a manual override there; passing it
         // blindly would let a stale setting outrank the real cassette.
-        media: settings.printMode === 'ipp' ? '' : settings.printMedia,
-        mode: settings.printMode,
+        media: '',
+        mode: 'ipp',
         jobId: job.id,
         extraOptions: {},
       });
