@@ -488,6 +488,12 @@ function registerRoutes(app, deps) {
       }
       next.printingEnabled = body.printingEnabled;
     }
+    if (body.dslrEnabled !== undefined) {
+      if (typeof body.dslrEnabled !== 'boolean') {
+        return res.status(400).json({ ok: false, error: 'invalid_dslrEnabled' });
+      }
+      next.dslrEnabled = body.dslrEnabled;
+    }
     if (body.printUnitPriceCents !== undefined) {
       const num = Number(body.printUnitPriceCents);
       if (!Number.isInteger(num) || num <= 0 || num > 100000) {

@@ -64,6 +64,13 @@ const DEFAULT_SETTINGS = {
   // mode with no visible error. Persisting the bucket name here instead means
   // setting it once via /admin keeps working across every future restart.
   firebaseStorageBucket: '',
+  // DSLR capture (server/camera.js, 2026-08-18) — when true, 'trigger-capture'
+  // shells out to gphoto2 against a USB-connected EOS 550D instead of asking
+  // the phone-camera browser page (public/camera/camera.js) for a shot.
+  // Defaults off: an event that hasn't wired up a DSLR must keep working with
+  // the phone camera exactly as before, and a failed gphoto2 capture falls
+  // back to the phone-camera path automatically either way (see index.js).
+  dslrEnabled: false,
 };
 
 const DEFAULT_STATS = {

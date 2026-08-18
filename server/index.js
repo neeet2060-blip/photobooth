@@ -15,6 +15,7 @@ const stateMachine = require('./state');
 const printqueue = require('./printqueue');
 const tokPayment = require('./tokPayment');
 const auth = require('./auth');
+const camera = require('./camera');
 
 const HTTPS_PORT = Number(process.env.PORT) || 3000;
 const HTTP_PORT = Number(process.env.HTTP_PORT) || 3001;
@@ -66,7 +67,11 @@ function runEffect(effect) {
       runCountdown(effect.sessionId, effect.seconds);
       break;
     case 'trigger-capture':
-      io.emit('capture-now', { sessionId: effect.sessionId });
+      if (store.readSettings().dslrEnabled) {
+        captureViaDslrAndRecord(effect.sessionId, effect.index);
+      } else {
+        io.emit('capture-now', { sessionId: effect.sessionId });
+      }
       break;
     case 'await-final-upload':
       // No-op: client uploads via POST /api/final, which dispatches finalSaved.
@@ -87,6 +92,42 @@ function runEffect(effect) {
       break;
     default:
       break;
+  }
+}
+
+// DSLR capture path (server/camera.js, 2026-08-18). Runs instead of the
+// 'capture-now' socket broadcast when settings.dslrEnabled is on. Mirrors
+// what POST /api/photos does after a phone-camera upload: dispatch
+// photoRecorded with just the index (the reducer derives the file path
+// itself — see server/state.js's 2026-08-11 audit comment on that case).
+//
+// On any gphoto2 failure (camera off, unplugged mid-session, still busy
+// from the previous shot, etc.) this falls back to the normal phone-camera
+// broadcast rather than leaving the session stuck on a countdown that
+// already hit zero with no photo and no way for a visitor to retry — the
+// same fail-open shape as printer.js falling back to folder mode, and
+// necessary because a booth with no operator nearby can't page anyone the
+// moment the DSLR misbehaves mid-event.
+//
+// isStillValid mirrors runCountdown's own guard just below: gphoto2 capture
+// takes long enough (real shutter + USB transfer, up to the 15s timeout)
+// that the global session could plausibly move on — finish, get reset, or
+// even start a new session reusing the same in-memory phase — before the
+// capture resolves. Without this check, a late dispatch or fallback could
+// attribute a shot (or a phone-camera prompt) to whatever session happens
+// to be active by the time gphoto2 returns, not the one that requested it.
+async function captureViaDslrAndRecord(sessionId, index) {
+  function isStillValid() {
+    return sessionState.sessionId === sessionId && sessionState.phase === stateMachine.PHASES.CAPTURE;
+  }
+  try {
+    await camera.captureViaDslr(sessionId, index);
+    if (!isStillValid()) return;
+    dispatch({ type: 'photoRecorded', payload: { index } });
+  } catch (err) {
+    console.error(`DSLR capture failed for session ${sessionId} shot ${index}, falling back to phone camera:`, err);
+    if (!isStillValid()) return;
+    io.emit('capture-now', { sessionId });
   }
 }
 

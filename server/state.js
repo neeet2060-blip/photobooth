@@ -384,7 +384,14 @@ function applyAction(state, action, context) {
       if (state.phase !== PHASES.CAPTURE) {
         return { state: withError(state, 'invalid_action'), effects };
       }
-      effects.push({ type: 'trigger-capture', sessionId: state.sessionId });
+      // index (2026-08-18, server/camera.js DSLR path): the phone-camera
+      // flow doesn't need this (it derives the shot index itself from the
+      // running session), but a server-side gphoto2 capture has to name its
+      // output file before dispatching photoRecorded, so it needs to know
+      // which shot this is *before* that dispatch happens. shotsTaken is
+      // exactly that — the count of shots already recorded, i.e. the index
+      // this capture will become once photoRecorded validates it below.
+      effects.push({ type: 'trigger-capture', sessionId: state.sessionId, index: state.shotsTaken });
       return { state: touch({ ...state, countdown: null }), effects };
     }
 

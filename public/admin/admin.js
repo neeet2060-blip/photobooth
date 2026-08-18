@@ -152,6 +152,11 @@ const SETTINGS_FIELDS = [
     type: 'text',
   },
   { key: 'defaultLang', label: '기본 언어', type: 'select', options: ['ko', 'en'] },
+  {
+    key: 'dslrEnabled',
+    label: 'DSLR 자동촬영 사용 (EOS 550D를 USB로 연결하고 켜면, 폰 카메라 대신 gphoto2로 촬영)',
+    type: 'checkbox',
+  },
 ];
 
 async function loadSettings() {
@@ -172,7 +177,11 @@ function renderSettingsForm(settings) {
     row.appendChild(label);
 
     let input;
-    if (field.type === 'select') {
+    if (field.type === 'checkbox') {
+      input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = settings[field.key] === true;
+    } else if (field.type === 'select') {
       input = document.createElement('select');
       for (const opt of field.options) {
         const optEl = document.createElement('option');
@@ -192,6 +201,7 @@ function renderSettingsForm(settings) {
       input.value = settings[field.key];
     }
     input.dataset.key = field.key;
+    input.dataset.type = field.type;
     row.appendChild(input);
     form.appendChild(row);
   }
@@ -201,7 +211,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
   const inputs = document.querySelectorAll('#settings-form [data-key]');
   const payload = {};
   inputs.forEach((input) => {
-    payload[input.dataset.key] = input.value;
+    payload[input.dataset.key] = input.dataset.type === 'checkbox' ? input.checked : input.value;
   });
   const res = await fetch('/api/admin/settings', {
     method: 'POST',

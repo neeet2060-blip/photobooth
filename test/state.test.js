@@ -174,6 +174,24 @@ test('captureNow: clears countdown and emits trigger-capture', () => {
   assert.ok(effects.some((e) => e.type === 'trigger-capture'));
 });
 
+test('captureNow: trigger-capture carries the shot index the DSLR path needs to name its file', () => {
+  // server/index.js's DSLR capture (server/camera.js) has to know which
+  // shot this is *before* dispatching photoRecorded — unlike the
+  // phone-camera flow, which derives it client-side. shotsTaken is that
+  // index: the count of shots already recorded when this capture starts.
+  let state = toCapture();
+  for (let i = 0; i < 2; i += 1) {
+    state = run(state, 'shutter').state;
+    state = run(state, 'captureNow', { index: i }).state;
+    state = run(state, 'photoRecorded', { index: i }).state;
+  }
+  assert.equal(state.shotsTaken, 2);
+  const counting = run(state, 'shutter').state;
+  const { effects } = run(counting, 'captureNow');
+  const triggerCapture = effects.find((e) => e.type === 'trigger-capture');
+  assert.equal(triggerCapture.index, 2);
+});
+
 test('photoRecorded: accumulates photos, moves to select once shotsTotal reached', () => {
   let state = toCapture(); // shotsTotal = 4
   for (let i = 0; i < 4; i += 1) {
